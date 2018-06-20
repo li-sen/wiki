@@ -1,0 +1,50 @@
+## ---------docker daemon配置部分-----------
+- name: 下载 docker 二进制文件
+  copy: src={{ base_dir }}/bin/{{ item }} dest={{ bin_dir }}/{{ item }} mode=0755
+  with_items:
+  - docker-containerd
+  - docker-containerd-shim
+  - docker-init
+  - docker-runc
+  - docker
+  - docker-containerd-ctr
+  - dockerd
+  - docker-proxy
+
+- name: docker命令自动补全
+  copy: src=docker dest=/etc/bash_completion.d/docker mode=0644
+
+- name: docker国内镜像加速
+  copy: src=daemon.json dest=/etc/docker/daemon.json
+
+- name: flush-iptables
+  shell: "iptables -F && iptables -X \
+        && iptables -F -t nat && iptables -X -t nat \
+        && iptables -F -t raw && iptables -X -t raw \
+        && iptables -F -t mangle && iptables -X -t mangle"
+
+- name: 创建docker的systemd unit文件
+  template: src=docker.service.j2 dest=/etc/systemd/system/docker.service
+
+- name: 开启docker 服务
+  shell: systemctl daemon-reload && systemctl enable docker && systemctl restart docker
+
+## 可选 ------安装docker查询镜像 tag的小工具----
+# 先拉取下节点的ansible setup信息，起到缓存效果，否则后续when 判断可能失败
+- name: 缓存ansilbe setup信息
+  setup: gather_subset=min
+  tags: docker-tag
+
+- name: apt安装轻量JSON处理程序
+  apt: name=jq state=latest
+  when: ansible_distribution == "Ubuntu" and ansible_distribution_major_version == "16"
+  tags: docker-tag
+
+- name: yum安装轻量JSON处理程序
+  yum: name=jq state=latest
+  when: ansible_distribution == "CentOS" and ansible_distribution_major_version == "7"
+  tags: docker-tag
+
+- name: 下载 docker-tag
+  copy: src=docker-tag dest={{ bin_dir }}/docker-tag mode=0755
+  tags: docker-tag

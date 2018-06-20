@@ -1,0 +1,27 @@
+- name: 下载etcd二进制文件
+  copy: src={{ base_dir }}/bin/{{ item }} dest={{ bin_dir }}/{{ item }} mode=0755
+  with_items:
+  - etcd
+  - etcdctl
+
+- name: 创建etcd证书目录
+  file: name=/etc/etcd/ssl state=directory
+
+- name: 创建etcd证书请求
+  template: src=etcd-csr.json.j2 dest=/etc/etcd/ssl/etcd-csr.json
+
+- name: 创建 etcd证书和私钥
+  shell: "cd /etc/etcd/ssl && {{ bin_dir }}/cfssl gencert \
+        -ca={{ ca_dir }}/ca.pem \
+        -ca-key={{ ca_dir }}/ca-key.pem \
+        -config={{ ca_dir }}/ca-config.json \
+        -profile=kubernetes etcd-csr.json | {{ bin_dir }}/cfssljson -bare etcd"
+
+- name: 创建etcd工作目录
+  file: name=/var/lib/etcd state=directory
+
+- name: 创建etcd的systemd unit文件
+  template: src=etcd.service.j2 dest=/etc/systemd/system/etcd.service
+
+- name: 开启etcd服务
+  shell: systemctl daemon-reload && systemctl enable etcd && systemctl restart etcd

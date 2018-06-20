@@ -1,0 +1,8 @@
+down/*
+!down/download.sh
+bin/*
+!bin/VERSION.md
+hosts
+*.crt
+*.pem
+roles/prepare/files/ca*

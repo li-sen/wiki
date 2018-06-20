@@ -1,0 +1,20 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: kube-state-metrics
+spec:
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        app: kube-state-metrics
+      annotations:
+        prometheus.io/scrape: 'true'
+        prometheus.io/port: '8080'
+    spec:
+      serviceAccountName: kube-state-metrics-monitor
+      containers:
+      - name: kube-state-metrics
+        image: 172.16.100.86/monitor/kube-state-metrics:v1.0.1
+        ports:
+        - containerPort: 8080
