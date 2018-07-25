@@ -177,7 +177,8 @@ data:
   key: QVFBU0hIWmFwcmJGSHhBQU4xak0rT1FpbU5hUTBaWnN1RGd4Qnc9PQ==
 type: kubernetes.io/rbd
 
-#namespace:kube-system也加下secret
+
+# namespace:kube-system也加下secret
 cat ceph-storageclass-secret-system.yml 
 apiVersion: v1
 kind: Secret
