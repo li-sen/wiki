@@ -1,3 +1,0 @@
-- hosts: kube-cluster
-  roles:
-  - calico 
