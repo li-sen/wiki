@@ -82,6 +82,9 @@ spec:
         - name: data
           mountPath: /data
           readOnly: false
+        - name: host-time
+          mountPath: /etc/localtime
+          readOnly: true
       volumes:
       - name: conf
         configMap:
@@ -89,6 +92,9 @@ spec:
           items: 
           - key: redis.conf
             path: redis.conf
+      - name: host-time
+        hostPath:
+          path: /etc/localtime
 
   volumeClaimTemplates:
   - metadata:

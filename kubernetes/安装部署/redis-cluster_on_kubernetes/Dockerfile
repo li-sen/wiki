@@ -8,7 +8,6 @@ RUN apt-get -y update \
   && apt-get -y autoremove \
   && apt-get -y clean 
 # gem install redis -v 3.3.5 安装ruby-redis插件，插件最新版本查看：https://rubygems.org/gems/redis/versions
-RUN echo "Asia/Shanghai" > /etc/timezone && dpkg-reconfigure -f noninteractive tzdata
 RUN wget -O /usr/local/bin/redis-trib http://download.redis.io/redis-stable/src/redis-trib.rb
 RUN chmod 755 /usr/local/bin/redis-trib
 CMD redis-server
