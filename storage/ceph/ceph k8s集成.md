@@ -7,6 +7,10 @@ kubectl create secret generic ceph-storageclass-secret \
 --from-literal=key='AQAnpk1bPFWCBRAAfBbc1xBzNNWJVcfyCrhWDA==' \
 --namespace=kube-system
 
+ kubectl create secret generic ceph-storageclass-secret \
+> --type="kubernetes.io/rbd" \
+> --from-literal=key='AQAnpk1bPFWCBRAAfBbc1xBzNNWJVcfyCrhWDA==' \
+> --namespace=default
 kubectl get secret --all-namespaces|grep ceph
 ```
 > --from-literal=key 为你ceph客户端key
@@ -61,32 +65,39 @@ rbd info k8s/kubernetes-dynamic-pvc-xxxxxx
 
 # 有状态应用引用示例
 前面省略...
-      volumeMounts:
-        - name: datadir
-          mountPath: /opt/zookeeper/data
-        - name: datalogdir
-          mountPath: /opt/zookeeper/data-log
+ volumeMounts:
+        - name: conf
+          mountPath: /conf
+          readOnly: false
+        - name: data
+          mountPath: /data
+          readOnly: false
+      volumes:
+      - name: conf
+        configMap:
+          name: redis-cluster
+          items:
+          - key: redis.conf
+            path: redis.conf
+
   volumeClaimTemplates:
   - metadata:
-      name: datadir
-      annotations:
-        volume.beta.kubernetes.io/storage-class: ceph-storageclass
+      name: data
+      labels:
+        name: redis-cluster
     spec:
       accessModes: [ "ReadWriteOnce" ]
+      storageClassName: ceph-storageclass
       # persistentVolumeReclaimPolicy: Recycle
       resources:
         requests:
           storage: 10Gi
-  - metadata:
-      name: datalogdir
-      annotations:
-        volume.beta.kubernetes.io/storage-class: ceph-storageclass
-    spec:
-      accessModes: [ "ReadWriteOnce" ]
-      # persistentVolumeReclaimPolicy: Recycle
-      resources:
-        requests:
-          storage: 10Gi
+
+# 1.11.0 对之前通过注释指定sc方式弃用了
+# annotations:
+#   volume.alpha.kubernetes.io/storage-class: anything
+
+
 ```
 > 备注
 > 1. 稳定性在于ceph

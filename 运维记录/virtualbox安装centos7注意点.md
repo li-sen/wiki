@@ -70,7 +70,7 @@ sed -i '/swap/d' /etc/fstab
 
 - 安装常用包
 ```
-yum install wget vim screen net-tools lrzsz -y
+yum install wget vim screen net-tools lrzsz glances -y
 wget -O /etc/yum.repos.d/epel.repo http://mirrors.aliyun.com/repo/epel-7.repo
 yum groupinstall "Development Tools" -y
 yum update -y
