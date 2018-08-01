@@ -245,11 +245,10 @@ global
         log /dev/log    local0
         log /dev/log    local1 notice
         chroot /var/lib/haproxy
-        stats socket /run/haproxy/admin.sock mode 660 level admin
+        stats socket /run/admin.sock mode 660 level admin
         stats timeout 30s
         user haproxy
         group haproxy
-        pidfile /var/run/haproxy.pid
         daemon
         nbproc 1
 
@@ -265,8 +264,8 @@ listen kube-master
         option tcplog
         balance source
         server master01 172.17.0.85:6443 check inter 2000 fall 2 rise 2 weight 1
-        server master02 172.17.0.86:6443 check inter 2000 fall 2 rise 2 weight 1
-        server master03 172.17.0.87:6443 check inter 2000 fall 2 rise 2 weight 1
+        server master01 172.17.0.86:6443 check inter 2000 fall 2 rise 2 weight 1
+        server master01 172.17.0.87:6443 check inter 2000 fall 2 rise 2 weight 1
 ```
 - 更改kubelet pod 存储路径
 ```bash
