@@ -4,12 +4,12 @@
 ```bash
 kubectl create secret generic ceph-storageclass-secret \
 --type="kubernetes.io/rbd" \
---from-literal=key='AQAnpk1bPFWCBRAAfBbc1xBzNNWJVcfyCrhWDA==' \
+--from-literal=key='AQAnpk1bPFWCBRAAfBbc1xBzNNWJVcfyCrhWDA=a' \
 --namespace=kube-system
 
  kubectl create secret generic ceph-storageclass-secret \
 > --type="kubernetes.io/rbd" \
-> --from-literal=key='AQAnpk1bPFWCBRAAfBbc1xBzNNWJVcfyCrhWDA==' \
+> --from-literal=key='AQAnpk1bPFWCBRAAfBbc1xBzNNWJVcfyCrhWDA=a' \
 > --namespace=default
 kubectl get secret --all-namespaces|grep ceph
 ```

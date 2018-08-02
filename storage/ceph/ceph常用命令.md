@@ -126,6 +126,10 @@ ceph osd unpause
 ```bash
 ceph osd in osd.3
 ```
+16. 重启osd
+```bash
+systemctl restart ceph-osd.target
+```
 # pg
 1. 查看pg状态
 ```bash
