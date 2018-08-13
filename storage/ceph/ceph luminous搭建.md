@@ -397,11 +397,12 @@ ceph osd pool create cephfs_metadata 128
 ```
 ## 启用pool
 ```bash
-ceph fs new cephfs cephfs_metadata 
+ceph fs new cephfs cephfs_metadata cephfs_data
 ceph fs ls
 ceph mds stat 
 ceph -s
 ```
+> 目前ceph仅支持一个fs，多个fs仍处于测试中。
 ## 客户端
 ```bash
 ansible kube-cluster -m yum -a 'name=ceph-common'
