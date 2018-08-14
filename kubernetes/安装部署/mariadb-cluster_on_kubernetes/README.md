@@ -65,48 +65,133 @@ kubectl logs -f mariadb-0  -n mysql -c init-config
 kubectl --namespace=mysql exec -c init-config mariadb-0 -- touch /tmp/confirm-new-cluster
 # 至此，整个集群会快速拉起来，然后可以进行数据验证。
 ```
+或更改init.sh 直接启动集群
+```bash
+init.sh: |
+    #!/bin/bash
+    set -x
+    [ "$(pwd)" != "/etc/mysql/conf.d" ] && cp * /etc/mysql/conf.d/
+
+    HOST_ID=${HOSTNAME##*-}
+
+    STATEFULSET_SERVICE=$(dnsdomainname -d)
+    POD_FQDN=$(dnsdomainname -A)
+
+    echo "This is pod $HOST_ID ($POD_FQDN) for statefulset $STATEFULSET_SERVICE"
+
+    [ -z "$DATADIR" ] && exit "Missing DATADIR variable" && exit 1
+
+    SUGGEST_EXEC_COMMAND="kubectl --namespace=$POD_NAMESPACE exec -c init-config $POD_NAME --"
+
+    function wsrepNewCluster {
+      sed -i 's|^#init-new-cluster#||' /etc/mysql/conf.d/galera.cnf
+    }
+
+    function wsrepRecover {
+      sed -i 's|^#init-recover#||' /etc/mysql/conf.d/galera.cnf
+    }
+
+    function wsrepForceBootstrap {
+      sed -i 's|safe_to_bootstrap: 0|safe_to_bootstrap: 1|' /data/db/grastate.dat
+    }
+
+    [[ $STATEFULSET_SERVICE = mariadb.* ]] || echo "WARNING: unexpected service name $STATEFULSET_SERVICE, Peer detection below may fail falsely."
+
+    if [ $HOST_ID -eq 0 ]; then
+      echo "This is the 1st statefulset pod. Checking if the statefulset is down ..."
+      getent hosts mariadb
+      [ $? -eq 2 ] && {
+        # https://github.com/docker-library/mariadb/commit/f76084f0f9dc13f29cce48c727440eb79b4e92fa#diff-b0fa4b30392406b32de6b8ffe36e290dR80
+        if [ ! -d "$DATADIR/mysql" ]; then
+          echo "No database in $DATADIR; configuring $POD_NAME for initial start"
+          wsrepNewCluster
+        else
+          set +x
+          echo "----- ACTION REQUIRED -----"
+          echo "No peers found, but data exists. To start in wsrep_new_cluster mode, run:"
+          echo "  $SUGGEST_EXEC_COMMAND touch /tmp/confirm-new-cluster"
+          echo "Or to start in recovery mode, to see replication state, run:"
+          echo "  $SUGGEST_EXEC_COMMAND touch /tmp/confirm-recover"
+          echo "Or to force bootstrap on this node, potentially losing writes, run:"
+          echo "  $SUGGEST_EXEC_COMMAND touch /tmp/confirm-force-bootstrap"
+          #echo "    NOTE This bypasses the following warning from new cluster mode:"
+          #echo "    It may not be safe to bootstrap the cluster from this node. It was not the last one to leave the cluster and may not contain all the updates. To force cluster bootstrap with this node, edit the grastate.dat file manually and set safe_to_bootstrap to 1 ."
+          echo "Or to try a regular start (for example after recovery + manual intervention), run:"
+          echo "  $SUGGEST_EXEC_COMMAND touch /tmp/confirm-resume"
+          echo "Waiting for response ..."
+          while [ ! -f /tmp/confirm-resume ]; do
+            sleep 1
+            if [ "$AUTO_NEW_CLUSTER" = "true" ]; then
+              echo "The AUTO_NEW_CLUSTER env was set to $AUTO_NEW_CLUSTER, will proceed without confirmation"
+              wsrepNewCluster
+              touch /tmp/confirm-resume
+            elif [ -f /tmp/confirm-new-cluster ]; then
+              echo "Confirmation received. Resuming new cluster start ..."
+              wsrepNewCluster
+              touch /tmp/confirm-resume
+            elif [ -f /tmp/confirm-force-bootstrap ]; then
+              echo "Forcing bootstrap on this node ..."
+              wsrepForceBootstrap
+              touch /tmp/confirm-new-cluster
+            elif [ -f /tmp/confirm-recover ]; then
+              echo "Confirmation received. Resuming in recovery mode."
+              echo "Note: to start the other pods you need to edit OrderedReady and add a command: --wsrep-recover"
+              wsrepRecover
+              touch /tmp/confirm-resume
+            fi
+          done
+          rm /tmp/confirm-*
+          set -x
+        fi
+      }
+    fi
+
+    # https://github.com/docker-library/mariadb/blob/master/10.2/docker-entrypoint.sh#L62
+    mysqld --verbose --help --log-bin-index="$(mktemp -u)" | tee /tmp/mariadb-start-config | grep -e ^version -e ^datadir -e ^wsrep -e ^binlog -e ^character-set -e ^collation
+```
 > 此操作还是尽量避免，可能会丢失事务，我这是测试环境为了可以快速拉起服务，才这么干；正常流程通过检查各节点的事务状态来提取最后的序列号，需要先从最后节点上自举启动，然后再启动其它节点。
 
 > pc.recovery(默认是启用)：在我们的数据中心停电的情况下，上电后回来，节点将读取启动最后的状态，将尝试恢复主组件一旦所有成员再次开始看到对方。这使得集群自动被关闭而无需任何人工干预恢复。
 
 > 后续再把init.sh进行优化。
 
-2. 集群挂掉，正常回复流程
+2. 所有集群非常正常关闭，不丢失数据恢复流程
 > 未验证此流程，先记录下。
 ```bash
 # 恢复前设置：
-确保在.profile中导出MYSQL_HOME路径。如果MySQL安装位于不同的位置，则将更改更改为MYSQL_HOME。（例如：MYSQL_HOME = / path / to / mysql）
-崩溃恢复步骤：
-
 1. 找到有效的seqno。查看每台服务器上的grastate.dat文件，以查看哪台计算机具有最新数据。seqno最大的节点是具有当前数据的节点。
 
 接下来，查看三个grastate.dat文件。
 
 a）Node0：此grastate.dat显示正常关闭。注意seqno。我们正在寻找具有最大seqno的节点。
-
 /var/lib/mysql/grastate.dat
 version: 2.1
 uuid: cbd332a9-f617-11e2-b77d-3ee9fa637069
 seqno: 43760
-b）Node1：此grastate.dat文件在seqno中显示-1。此节点在事务处理期间崩溃。使用wsrep-recover选项启动此节点。MySQL将最后提交的GTID存储在InnoDB数据头中。
 
+b）Node1：此grastate.dat文件在seqno中显示-1。此节点在事务处理期间崩溃，非正常关闭。
 /var/lib/mysql/grastate.dat
 version: 2.1
 uuid: cbd332a9-f617-11e2-b77d-3ee9fa637069
 seqno: -1
-c）Node2：此grastate.dat文件没有seqno或组ID。此节点在DDL期间崩溃。
 
+
+c）Node2：此grastate.dat文件没有seqno或组ID。此节点在DDL期间崩溃。
 /var/lib/mysql/grastate.dat
 version: 2.1
 uuid: 00000000-0000-0000-0000-000000000000
 seqno: -1
 
-2. 接下来，使用uuid恢复节点，但没有seqno。要获取seqno，请使用--wsrep-recover选项。要恢复seqno：
-/ path / to / mysql / bin / mysqld --wsrep-recover。Mysqld将读取InnoDB头文件并立即关闭。最后一个wsrep位置打印在mysqld.log文件中。
+2. 接下来，使用uuid恢复节点，但没有seqno。要获取seqno，请使用--wsrep-recover选项。
+恢复seqno：
+/ path / to / mysql / bin / mysqld --wsrep-recover。
+# Mysqld将读取InnoDB头文件并立即关闭。最后一个wsrep位置打印在mysqld.log文件中。
 
-示例：140716 12:55:45 [注意] WSREP：找到保存状态：cbd332a9- f617-11e2-b77d-3ee9fa637069：36742
+示例：
+140716 12:55:45 [Note] WSREP: Found saved state: cbd332a9- f617-11e2-b77d-3ee9fa637069:36742
 
-查看Node0（seqno：43760）和Node1（seqno：-1）的seqno。Node0具有当前数据快照，应首先启动。
+查看Node0（seqno：43760）和Node1（seqno：-1）的seqno。
+Node0 seqno最大，具有完整数据，应首先启动。
 
 在Node0上，发出此命令以启动节点：
 
