@@ -22,6 +22,8 @@ data:
     wsrep_cluster_address="gcomm://mariadb-0.mariadb,mariadb-1.mariadb,mariadb-2.mariadb"
     wsrep_provider_options="gcache.name = /data/db/galera.cache; gcache.size=1G; gcache.page_size=1G; gcache.recover = yes"
     wsrep_slave_threads=4
+    wsrep_replicate_myisam=ON
+    wsrep_dirty_reads=1
 
     binlog_format=ROW
     default_storage_engine=InnoDB
@@ -36,7 +38,7 @@ data:
     # Optional setting
     #wsrep_slave_threads=1
     #innodb_flush_log_at_trx_commit=0
-  utf8.cnf: |
+  config.cnf: |
     [client-server]
 
     # This will be passed to all mysql clients
@@ -45,8 +47,24 @@ data:
 
     # The MySQL server
     [mysqld]
+    character-set-client-handshake = FALSE
     character-set-server = utf8mb4
     collation-server = utf8mb4_unicode_ci
+    init_connect = 'SET NAMES utf8mb4'
+
+
+    log-error = /data/db/error.log
+    slow-query-log = 1
+    slow-query-log-file = /data/db/slow.log
+    expire-logs-days = 1
+
+    default-storage-engine = innodb
+    innodb-buffer-pool-size = 1G
+
+    lower_case_table_names = 1
+    performance-schema-instrument='memory/%=COUNTED'
+    interactive_timeout = 172800
+    wait_timeout = 172800
 
     [mysql]
     default-character-set = utf8mb4
