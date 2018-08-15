@@ -55,7 +55,6 @@ data:
     skip-name-resolve
     query_cache_size = 0
 
-    log = /data/db/mysqld.log
     log-error = /data/db/error.log
 
     slow-query-log = 1

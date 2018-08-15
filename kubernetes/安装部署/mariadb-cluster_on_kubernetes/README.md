@@ -158,54 +158,79 @@ init.sh: |
 
 2. 集群挂掉，不丢失数据恢复流程
 > 未验证此流程，先记录下。
+1. 找到数据最完整的节点。
+
+查看每台服务器上的grastate.dat文件，以查看哪台计算机具有最新数据。seqno最大的节点是具有当前数据的节点。
+
+例如以下三个节点的grastate.dat文件：
 ```bash
-# 恢复前设置：
-1. 找到有效的seqno。查看每台服务器上的grastate.dat文件，以查看哪台计算机具有最新数据。seqno最大的节点是具有当前数据的节点。
-
-接下来，查看三个grastate.dat文件。
-
-a）Node0：此grastate.dat显示正常关闭。注意seqno。我们正在寻找具有最大seqno的节点。
+a）Node0：此grastate.dat显示正常关闭。（seqno非负值）
 /var/lib/mysql/grastate.dat
 version: 2.1
 uuid: cbd332a9-f617-11e2-b77d-3ee9fa637069
 seqno: 43760
 
-b）Node1：此grastate.dat文件在seqno中显示-1。此节点在事务处理期间崩溃，非正常关闭。
+b）Node1：此grastate.dat文件在seqno中显示-1，此节点在事务处理期间崩溃，非正常关闭。
 /var/lib/mysql/grastate.dat
 version: 2.1
 uuid: cbd332a9-f617-11e2-b77d-3ee9fa637069
 seqno: -1
 
 
-c）Node2：此grastate.dat文件没有seqno或组ID。此节点在DDL期间崩溃。
+c）Node2：此grastate.dat文件seqno为-1 uuid丢失，此节点在DDL期间崩溃。
 /var/lib/mysql/grastate.dat
 version: 2.1
 uuid: 00000000-0000-0000-0000-000000000000
 seqno: -1
-
-2. 接下来，使用uuid恢复节点，但没有seqno。要获取seqno，请使用--wsrep-recover选项。
+```
+2.没有seqno，要获取seqno，请使用--wsrep-recover选项。
+> Mysqld将读取InnoDB头文件并立即关闭，最后一个wsrep位置打印在log文件中。
+```bash
 恢复seqno：
-/ path / to / mysql / bin / mysqld --wsrep-recover。
-# Mysqld将读取InnoDB头文件并立即关闭。最后一个wsrep位置打印在mysqld.log文件中。
+mysqld --wsrep-recover。
 
 示例：
 140716 12:55:45 [Note] WSREP: Found saved state: cbd332a9- f617-11e2-b77d-3ee9fa637069:36742
 
-查看Node0（seqno：43760）和Node1（seqno：-1）的seqno。
-Node0 seqno最大，具有完整数据，应首先启动。
+```
+3. 启动恢复
+> 通过对比，Node0 seqno最大，具有完整数据，应首先启动。
 
-在Node0上，发出此命令以启动节点：
-# 如果node0 也是非正常关闭，同样用 --wsrep-recover查看seqno，然后进行同样操作，这里关键就是找出最大seqno，保证数据完整性。
-a）mv gvwstate.dat gvwstate.dat.bak
+> 如果node0 也是非正常关闭，同样用 --wsrep-recover查看seqno，然后进行同样操作，这里关键就是找出最大seqno，保证数据完整性。
+```bash
+a) 启动Node0节点
+方法1：
+mv gvwstate.dat gvwstate.dat.bak
+然后启动：
 启动命令（不同版本的不同启动方式）：
 $ service mysql bootstrap # sysvinit
 $ service mysql start --wsrep-new-cluster # sysvinit
 $ galera_new_cluster # systemd 
 $ mysqld_safe --wsrep-new-cluster # command line
 
+方法2:
+修改grastate.dat 配置文件 “safe_to_bootstrap: 1”，
+systemctl start mariadb 启动此节点即可。
+
+
 b）然后正常启动Node1和Node2：systemctl start mariadb
 
-c）一旦所有三个节点都处于启动状态并处于主状态，请以正常方式重新启动Node0（因此它将作为整个群集的一部分出现，而不仅仅是一个引导程序）。
+c）方法1：一旦所有三个节点都处于启动状态并处于主状态，恢复集群正常状态，请以正常方式重新启动Node0（因此它将作为整个群集的一部分出现，而不仅仅是一个引导程序）。
 
-如果Node1或Node2具有最高的seqno，那么该节点将作为引导程序启动，并且您将允许其余节点一次启动一个（连接到具有最高seqno的节点）。
+```
+4. 通过非k8s环境的恢复流程，如果集群整体挂掉，对应此项目我们希望不丢数据的恢复流程应该操作如下：
+```bash
+1. 更改statefulsets启动顺序为 非顺序启动。
+podManagementPolicy: OrderedReady 改为 podManagementPolicy: Parallel
+
+2. 参照init.sh，使非正常关闭的节点进入recover模式，找到数据最完整的节点
+kubectl --namespace=mysql exec -c init-config mariadb-0 -- touch /tmp/confirm-recover
+kubectl --namespace=mysql exec -c init-config mariadb-1 -- touch /tmp/confirm-recover
+kubectl --namespace=mysql exec -c init-config mariadb-2 -- touch /tmp/confirm-recover
+
+3. 进入数据最完整的节点的pv也就是数据目录
+修改grastate.dat 配置文件 “safe_to_bootstrap: 1”，
+systemctl start mariadb 正常启动节点 我这里直接delete 对应pod即可
+
+4. 正常启动其他节点，同样delete pod
 ```
