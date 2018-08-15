@@ -52,9 +52,14 @@ data:
     collation-server = utf8mb4_unicode_ci
     init_connect = 'SET NAMES utf8mb4'
 
+    skip-name-resolve
+    query_cache_size = 0
 
+    log = /data/db/mysqld.log
     log-error = /data/db/error.log
+
     slow-query-log = 1
+    long_query_time = 1
     slow-query-log-file = /data/db/slow.log
     expire-logs-days = 1
 

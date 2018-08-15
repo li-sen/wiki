@@ -1,6 +1,7 @@
 此部署参考此部署是参考 [Yolean/kubernetes-mysql-cluster](https://github.com/Yolean/kubernetes-mysql-cluster)，根据项目描述是已经在生产跑了一段时间了，但是负载不高。
 > 使用mgc 性能是比较低的，能达到单机的60%就不错了，没办法CAP原则，高一致性，性能肯定要让步的。
-> 集群需要ceph环境，参考我之前的ceph搭建文档
+> 当集群所有节点非正常关闭时，是需要手动进行集群修复，项目作者也是不建议使用自动恢复，因为造成这种问题有很多不确定性，为了避免丢失数据，建议手动进行恢复，并且做好集群监控报警工作，我还是比较认可此观点的。
+> 集群需要ceph环境，参考我之前的ceph搭建文档。
 
 # Get started
 
@@ -52,7 +53,7 @@ It's normal operations to scale down to two instances
 and up to any number of replicas.
 
 # 故障记录
-1. 整个集群挂掉，如何快速恢复
+1. 整个集群所有节点非正常关闭，如何快速恢复（会丢失数据，仅用于自己测试环境）
 ```bash
 # 到第一个（mariadb-0）节点，找到挂载的数据目录
 cd /opt/kubelet/plugins/kubernetes.io/rbd/mounts/k8s-image-kubernetes-dynamic-pvc-95b2a503-9561-11e8-bab0-00163e13cf6c/db
@@ -155,7 +156,7 @@ init.sh: |
 
 > 后续再把init.sh进行优化。
 
-2. 所有集群非常正常关闭，不丢失数据恢复流程
+2. 集群挂掉，不丢失数据恢复流程
 > 未验证此流程，先记录下。
 ```bash
 # 恢复前设置：
@@ -194,10 +195,15 @@ seqno: -1
 Node0 seqno最大，具有完整数据，应首先启动。
 
 在Node0上，发出此命令以启动节点：
+# 如果node0 也是非正常关闭，同样用 --wsrep-recover查看seqno，然后进行同样操作，这里关键就是找出最大seqno，保证数据完整性。
+a）mv gvwstate.dat gvwstate.dat.bak
+启动命令（不同版本的不同启动方式）：
+$ service mysql bootstrap # sysvinit
+$ service mysql start --wsrep-new-cluster # sysvinit
+$ galera_new_cluster # systemd 
+$ mysqld_safe --wsrep-new-cluster # command line
 
-a）nohup / path / to / mysql / bin / mysqld_safe - wsrep_cluster_address = gcomm：//＆; 等待此节点联机。
-
-b）然后启动Node1和Node2。这两个节点应该一次启动一个，并且可以像往常一样启动。
+b）然后正常启动Node1和Node2：systemctl start mariadb
 
 c）一旦所有三个节点都处于启动状态并处于主状态，请以正常方式重新启动Node0（因此它将作为整个群集的一部分出现，而不仅仅是一个引导程序）。
 
