@@ -58,7 +58,7 @@ data:
     log-error = /data/db/error.log
 
     slow-query-log = 1
-    long_query_time = 1
+    long_query_time = 2
     slow-query-log-file = /data/db/slow.log
     expire-logs-days = 1
 
