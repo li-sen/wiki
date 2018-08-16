@@ -259,6 +259,10 @@ kubectl --namespace=mysql exec -c init-config mariadb-0 -- touch /tmp/confirm-re
 kubectl --namespace=mysql exec -c init-config mariadb-1 -- touch /tmp/confirm-resume
 kubectl --namespace=mysql exec -c init-config mariadb-2 -- touch /tmp/confirm-resume
 
+kubectl --namespace=mysql exec -c init-config mariadb-0 -- touch /tmp/confirm-resume
+kubectl --namespace=mysql exec -c init-config mariadb-1 -- touch /tmp/confirm-resume
+kubectl --namespace=mysql exec -c init-config mariadb-2 -- touch /tmp/confirm-resume
+
 修改grastate.dat 配置文件 “safe_to_bootstrap: 1”，
 systemctl start mariadb 正常启动节点 我这里直接delete 对应pod即可
 
