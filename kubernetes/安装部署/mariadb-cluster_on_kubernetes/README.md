@@ -231,6 +231,7 @@ sed -i 's/fi # tag/#fi # tag/g' 10conf-d.yml
 kubectl apply -f 10conf-d.yml
 kubectl apply -f 40mariadb.yml
 kubectl get pod -n mysql
+kubectl logs -f mariadb-0  -n mysql -c init-config
 
 3. 参照init.sh，使非正常关闭的节点进入recover模式，找到数据最完整的节点
 kubectl --namespace=mysql exec -c init-config mariadb-0 -- touch /tmp/confirm-recover

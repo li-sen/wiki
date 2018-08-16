@@ -20,10 +20,10 @@ data:
     #init-new-cluster#wsrep_new_cluster=TRUE
     #init-recover#wsrep_recover=TRUE
     wsrep_cluster_address="gcomm://mariadb-0.mariadb,mariadb-1.mariadb,mariadb-2.mariadb"
-    wsrep_provider_options="gcache.name = /data/db/galera.cache; gcache.size=1G; gcache.page_size=1G; gcache.recover = yes"
+    wsrep_provider_options="pc.recovery = TRUE; gcache.name = /data/db/galera.cache; gcache.size=1G; gcache.page_size=1G; gcache.recover = yes"
     wsrep_slave_threads=4
     wsrep_replicate_myisam=ON
-    wsrep_dirty_reads=1
+    wsrep_causal_reads=ON
 
     binlog_format=ROW
     default_storage_engine=InnoDB
