@@ -1,7 +1,12 @@
 此部署参考此部署是参考 [Yolean/kubernetes-mysql-cluster](https://github.com/Yolean/kubernetes-mysql-cluster)，根据项目描述是已经在生产跑了一段时间了，但是负载不高。
-> 1. 使用mgc 性能是比较低的，能达到单机的60%就不错了，没办法CAP原则，高一致性，性能肯定要让步的。
-> 2. 当集群所有节点都挂掉时，是需要手动进行集群修复，项目作者也是不建议使用自动恢复，因为造成这种问题有很多不确定性，为了避免丢失数据，建议手动进行恢复，并且做好集群监控报警工作；我还是比较认同此观点的，不丢数据才是王道，毕竟集群整个挂掉的几率很小。
-> 3. 集群需要ceph环境，参考我之前的ceph搭建文档。
+
+> 1. 当集群所有节点都挂掉时，是需要手动进行集群修复，项目作者也是不建议使用自动恢复，因为造成这种问题有很多不确定性，为了避免丢失数据，建议手动进行恢复，并且做好集群监控报警工作；我还是比较认同此观点的，不丢数据才是王道，毕竟集群整个挂掉的几率很小。
+> 2. 使用mgc 性能是比较低的，能达到单机的60%就不错了，没办法CAP原则，高一致性，性能肯定要让步的。
+> 3. 使用galeracluster方案，必须小心ddl问题，这里我附下链接：[Galera Cluster](https://blog.csdn.net/linuxprobe2017/article/details/76874949?locationNum=4&fps=1)
+> 4. 集群需要ceph环境，参考我之前的ceph搭建文档。
+
+这里我对原项目进行了小幅改动，主要改动点就是podManagementPolicy，将OrderedReady，改成Parallel。改动的原因是在当整个集群节点都挂掉了，需要进行手动数据恢复，为了不丢数据，肯定是数据最完整的先 引导启动，然后其他节点在加入同步，这就不能通过顺序启动了；集群都挂掉，使用--wsrep-recover比对seqno，也需要并发启动。init.sh也进行了相应的改动，请自行查看。
+
 
 # Get started
 
@@ -15,6 +20,7 @@ Readiness and liveness probes will only assert client-level health of individual
 Watch logs for "sst" or "Quorum results", or run this quick check:
 ```
 for i in 0 1 2; do kubectl -n mysql exec mariadb-$i -- mysql -e "SHOW STATUS LIKE 'wsrep_cluster_size';" -N; done
+
 kubectl -n mysql exec mariadb-0 -- mysql -e "grant all privileges on *.* to root@'%' identified by 'xxxxx' with grant option;"
 ```
 
@@ -29,31 +35,7 @@ A reasonable alert is on `mysql_global_status_wsrep_cluster_size` staying below 
 
 ### Cluster un-health
 
-We need to assume a couple of things here. First and foremost:
-Production clusters are configured so that the statefulset pods do not go down together.
-
- * Pods are properly spread across nodes.
- * Nodes are spread across multiple availability zones.
-
-Let's also assume that there is monitoring.
-Any `wsrep_cluster_size` issue (see above), or absence of `wsrep_cluster_size`
-should lead to a human being paged.
-
-Rarity combined with manual attention means that this statefulset can/should avoid
-attempts at automatic [recovery](http://galeracluster.com/documentation-webpages/pcrecovery.html).
-The reason for that being: we can't test for failure modes properly,
-as they depend on the Kubernetes setup.
-Automation may appoint the wrong leader - losing writes -
-or cause split-brain situations.
-
-We can however support detection in the init script.
-
-It's normal operations to scale down to two instances
-- actually one instance, but nodes should be considered ephemeral so don't do that -
-and up to any number of replicas.
-
-# 故障记录
-## 集群所有节点关闭，如何快速恢复
+#### 集群所有节点down，如何快速恢复
 > 会丢失数据，仅用于自己测试环境
 ```bash
 # 到第一个（mariadb-0）节点，找到挂载的数据目录
@@ -153,11 +135,7 @@ init.sh: |
 ```
 > 此操作还是尽量避免，可能会丢失事务，我这是测试环境为了可以快速拉起服务，才这么干；正常流程通过检查各节点的事务状态来提取最后的序列号，需要先从最后节点上自举启动，然后再启动其它节点。
 
-> pc.recovery(默认是启用)：在我们的数据中心停电的情况下，上电后回来，节点将读取启动最后的状态，将尝试恢复主组件一旦所有成员再次开始看到对方。这使得集群自动被关闭而无需任何人工干预恢复。
-
-> 后续再把init.sh进行优化。
-
-## 非k8s环境，集群挂掉，不丢失数据恢复流程
+#### 非k8s环境，集群挂掉，不丢失数据恢复流程
 
 1. 找到数据最完整的节点。
 
@@ -218,29 +196,30 @@ b）然后正常启动Node1和Node2：systemctl start mariadb
 c）方法1：一旦所有三个节点都处于启动状态并处于主状态，恢复集群正常状态，请以正常方式重新启动Node0（因此它将作为整个群集的一部分出现，而不仅仅是一个引导程序）。
 
 ```
-4. 项目环境，操作流程
+#### 本项目环境，集群挂掉，不丢数据，操作流程
 通过非k8s环境的恢复流程，如果集群整体挂掉，对应此项目我们希望不丢数据的恢复流程应该操作如下：
-```bash
 1. 删除statefulsets，更改statefulsets启动顺序为 非顺序启动。
+```bash
 kubectl delete -f 40mariadb.yml
-sed -i 's/podManagementPolicy: OrderedReady/podManagementPolicy: Parallel/g' 40mariadb.yml
+```
 
 2. 修改init.sh
-sed -i "/if\ \[\ \$HOST_ID/ s/if/#if/g" 10conf-d.yml
-sed -i 's/fi # tag/#fi # tag/g' 10conf-d.yml
-kubectl apply -f 10conf-d.yml
+```bash
 kubectl apply -f 40mariadb.yml
 kubectl get pod -n mysql
 kubectl logs -f mariadb-0  -n mysql -c init-config
+```
 
 3. 参照init.sh，使非正常关闭的节点进入recover模式，找到数据最完整的节点
+```bash
 kubectl --namespace=mysql exec -c init-config mariadb-0 -- touch /tmp/confirm-recover
 kubectl --namespace=mysql exec -c init-config mariadb-1 -- touch /tmp/confirm-recover
 kubectl --namespace=mysql exec -c init-config mariadb-2 -- touch /tmp/confirm-recover
 
-kubectl get pod -n mysql
-
+kubectl get pod -n mysql -o wide
+```
 4. 进入各节点pv，也就是数据目录查看日志，得到seqno最大节点
+```bash
 # 得到各节点pv
 for pvname in `kubectl get pv |grep mariadb|awk '{print \$1}'`;
 do
@@ -254,10 +233,12 @@ done
 # 进入对应节点，查看日志
 df -h |grep kubernetes-dynamic-pvc-b3d4b18a-9561-11e8-bab0-00163e13cf6c
 cd /opt/kubelet/plugins/kubernetes.io/rbd/mounts/k8s-image-kubernetes-dynamic-pvc-b3d4b18a-9561-11e8-bab0-00163e13cf6c
-tail -200f error.log |grep 'WSREP: Recovered position'
+tail -200f db/error.log |grep 'WSREP: Recovered position'
 # 比对完，各节点需要退出目录，以方便容器删除时释放pv
 
+```
 5. 进行recovery
+```bash
 # 通过对比发现mariadb-2 seqno最大，故第一个引导启动
 kubectl delete -f 40mariadb.yml
 kubectl apply -f 40mariadb.yml
@@ -266,11 +247,15 @@ kubectl get pod -n mysql
 # 到mariadb-2 设置安全启动
 cd /opt/kubelet/plugins/kubernetes.io/rbd/mounts/k8s-image-kubernetes-dynamic-pvc-d56272c8-9561-11e8-bab0-00163e13cf6c/db
 sed -i 's/safe_to_bootstrap: 0/safe_to_bootstrap: 1/g' grastate.dat
+# 需要退出目录，以方便容器删除时释放pv
+# 如发现initContainers无法启动则删除40mariadb.yml重建
 
 kubectl --namespace=mysql exec -c init-config mariadb-2 -- touch /tmp/confirm-new-cluster
-
+sleep 10
 kubectl --namespace=mysql exec -c init-config mariadb-0 -- touch /tmp/confirm-resume
+sleep 10
 kubectl --namespace=mysql exec -c init-config mariadb-1 -- touch /tmp/confirm-resume
 kubectl get pod -n mysql -o wide
+
 至此集群恢复健康状态，可以进行数据验证
 ```
