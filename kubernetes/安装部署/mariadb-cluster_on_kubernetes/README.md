@@ -238,6 +238,8 @@ kubectl --namespace=mysql exec -c init-config mariadb-0 -- touch /tmp/confirm-re
 kubectl --namespace=mysql exec -c init-config mariadb-1 -- touch /tmp/confirm-recover
 kubectl --namespace=mysql exec -c init-config mariadb-2 -- touch /tmp/confirm-recover
 
+kubectl get pod -n mysql
+
 4. 进入各节点pv，也就是数据目录查看日志，得到seqno最大节点
 # 得到各节点pv
 for pvname in `kubectl get pv |grep mariadb|awk '{print \$1}'`;
@@ -253,18 +255,22 @@ done
 df -h |grep kubernetes-dynamic-pvc-b3d4b18a-9561-11e8-bab0-00163e13cf6c
 cd /opt/kubelet/plugins/kubernetes.io/rbd/mounts/k8s-image-kubernetes-dynamic-pvc-b3d4b18a-9561-11e8-bab0-00163e13cf6c
 tail -200f error.log |grep 'WSREP: Recovered position'
+# 比对完，各节点需要退出目录，以方便容器删除时释放pv
 
+5. 进行recovery
+# 通过对比发现mariadb-2 seqno最大，故第一个引导启动
+kubectl delete -f 40mariadb.yml
+kubectl apply -f 40mariadb.yml
+kubectl get pod -n mysql
+
+# 到mariadb-2 设置安全启动
+cd /opt/kubelet/plugins/kubernetes.io/rbd/mounts/k8s-image-kubernetes-dynamic-pvc-d56272c8-9561-11e8-bab0-00163e13cf6c/db
+sed -i 's/safe_to_bootstrap: 0/safe_to_bootstrap: 1/g' grastate.dat
+
+kubectl --namespace=mysql exec -c init-config mariadb-2 -- touch /tmp/confirm-new-cluster
 
 kubectl --namespace=mysql exec -c init-config mariadb-0 -- touch /tmp/confirm-resume
 kubectl --namespace=mysql exec -c init-config mariadb-1 -- touch /tmp/confirm-resume
-kubectl --namespace=mysql exec -c init-config mariadb-2 -- touch /tmp/confirm-resume
-
-kubectl --namespace=mysql exec -c init-config mariadb-0 -- touch /tmp/confirm-resume
-kubectl --namespace=mysql exec -c init-config mariadb-1 -- touch /tmp/confirm-resume
-kubectl --namespace=mysql exec -c init-config mariadb-2 -- touch /tmp/confirm-resume
-
-修改grastate.dat 配置文件 “safe_to_bootstrap: 1”，
-systemctl start mariadb 正常启动节点 我这里直接delete 对应pod即可
-
-4. 正常启动其他节点，同样delete pod
+kubectl get pod -n mysql -o wide
+至此集群恢复健康状态，可以进行数据验证
 ```

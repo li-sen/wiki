@@ -109,14 +109,14 @@ data:
 
     [[ $STATEFULSET_SERVICE = mariadb.* ]] || echo "WARNING: unexpected service name $STATEFULSET_SERVICE, Peer detection below may fail falsely."
 
-    if [ $HOST_ID -eq 0 ]; then
+    # if [ $HOST_ID -eq 0 ]; then
       echo "This is the 1st statefulset pod. Checking if the statefulset is down ..."
       getent hosts mariadb
       [ $? -eq 2 ] && {
         # https://github.com/docker-library/mariadb/commit/f76084f0f9dc13f29cce48c727440eb79b4e92fa#diff-b0fa4b30392406b32de6b8ffe36e290dR80
         if [ ! -d "$DATADIR/mysql" ]; then
           echo "No database in $DATADIR; configuring $POD_NAME for initial start"
-          wsrepNewCluster
+          [ $HOST_ID -eq 0 ] && wsrepNewCluster
         else
           set +x
           echo "----- ACTION REQUIRED -----"
@@ -131,7 +131,7 @@ data:
             sleep 1
             if [ "$AUTO_NEW_CLUSTER" = "true" ]; then
               echo "The AUTO_NEW_CLUSTER env was set to $AUTO_NEW_CLUSTER, will proceed without confirmation"
-              wsrepNewCluster
+                [ $HOST_ID -eq 0 ] && wsrepNewCluster
               touch /tmp/confirm-resume
             elif [ -f /tmp/confirm-new-cluster ]; then
               echo "Confirmation received. Resuming new cluster start ..."
@@ -148,7 +148,7 @@ data:
           set -x
         fi
       }
-    fi # tag
+    # fi
 
     # https://github.com/docker-library/mariadb/blob/master/10.2/docker-entrypoint.sh#L62
     mysqld --verbose --help --log-bin-index="$(mktemp -u)" | tee /tmp/mariadb-start-config | grep -e ^version -e ^datadir -e ^wsrep -e ^binlog -e ^character-set -e ^collation
