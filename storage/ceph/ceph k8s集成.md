@@ -8,9 +8,9 @@ kubectl create secret generic ceph-storageclass-secret \
 --namespace=kube-system
 
  kubectl create secret generic ceph-storageclass-secret \
-> --type="kubernetes.io/rbd" \
-> --from-literal=key='AQAnpk1bPFWCBRAAfBbc1xBzNNWJVcfyCrhWDA=a' \
-> --namespace=default
+--type="kubernetes.io/rbd" \
+--from-literal=key='AQAnpk1bPFWCBRAAfBbc1xBzNNWJVcfyCrhWDA=a' \
+--namespace=default
 kubectl get secret --all-namespaces|grep ceph
 ```
 > --from-literal=key 为你ceph客户端key
