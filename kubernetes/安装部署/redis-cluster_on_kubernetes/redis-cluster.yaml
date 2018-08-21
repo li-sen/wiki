@@ -48,6 +48,9 @@ spec:
     metadata:
       labels:
         app: redis-cluster
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9121"
     spec:
       containers:
       - name: redis-cluster
@@ -85,6 +88,14 @@ spec:
         - name: host-time
           mountPath: /etc/localtime
           readOnly: true
+      - name: redis-exporter
+        image: oliver006/redis_exporter:latest
+        resources:
+          requests:
+            cpu: 100m
+            memory: 100Mi
+        ports:
+        - containerPort: 9121
       volumes:
       - name: conf
         configMap:
