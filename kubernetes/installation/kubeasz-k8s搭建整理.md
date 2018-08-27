@@ -272,6 +272,11 @@ listen kube-master
 vim /etc/ansible/roles/kube-node/templates/kubelet.service.j2
   --root-dir=/opt/kubelet \
 ```
+- calico metrics 检查是否开启
+```bash
+FELIX_PROMETHEUSMETRICSENABLED ture
+FELIX_PROMETHEUSMETRICSPORT 9091
+```
 - 更改kube-proxy负载模式为ipvs
 ```bash
 vim /etc/ansible/roles/kube-node/templates/kube-proxy.service.j2
