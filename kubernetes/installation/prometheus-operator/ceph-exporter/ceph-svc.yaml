@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: monitoring
+  name: ceph
+  labels:
+    k8s-app: ceph
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+  - name: http-metrics
+    port: 9128
+    targetPort: 9128
+    protocol: TCP

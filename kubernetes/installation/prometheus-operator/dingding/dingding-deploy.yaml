@@ -1,0 +1,35 @@
+apiVersion: apps/v1beta2
+kind: Deployment
+metadata:
+  labels:
+    name: prometheus-webhook-dingtalk
+  name: prometheus-webhook-dingtalk
+  namespace: monitoring
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: prometheus-webhook-dingtalk
+  template:
+    metadata:
+      labels:
+        app: prometheus-webhook-dingtalk
+    spec:
+      containers:
+      - image: timonwong/prometheus-webhook-dingtalk
+        name: prometheus-webhook-dingtalk
+        args:
+        - "--ding.profile=node=https://oapi.dingtalk.com/robot/send?access_token=xxxxxxx"
+        - "--web.listen-address=:8080"
+        ports:
+        - containerPort: 8080
+          protocol: TCP
+        resources:
+          requests:
+            cpu: 100m
+            memory: 100Mi
+          limits:
+            cpu: 500m
+            memory: 500Mi
+      imagePullSecrets:
+        - name: IfNotPresent

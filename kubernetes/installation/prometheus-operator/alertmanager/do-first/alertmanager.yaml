@@ -1,0 +1,54 @@
+templates:
+- '*.tmpl'
+global:
+  resolve_timeout: 5m
+  smtp_smarthost: 'smtp.163.com:25'
+  smtp_from: '17676@163.com'
+  smtp_auth_username: '176@163.com'
+  smtp_auth_password: 'aa56'
+  smtp_require_tls: false
+route:
+  receiver: email-alert
+  group_by: ['alertname']
+  group_interval: 1m
+  repeat_interval: 30m
+  routes:
+  - receiver: email-alert
+    group_by: ['alertname']
+    group_interval: 1m
+    repeat_interval: 30m
+    continue: true
+    match_re:
+      severity: critical|warning
+#  - receiver: webchat
+#    group_by: ['alertname']
+#    group_interval: 1m
+#    repeat_interval: 30m
+#    match_re:
+#      severity: critical|warning
+#    continue: true
+  - receiver: webhook
+    group_by: ['alertname']
+    group_interval: 1m
+    repeat_interval: 30m
+    match_re:
+      severity: critical|warning
+    continue: true
+receivers:
+- name: 'email-alert'
+  email_configs:
+  - to : '4293@qq.com'
+    send_resolved: true
+- name: webhook
+  webhook_configs:
+  - url: 'http://prometheus-webhook-dingtalk/dingtalk/node/send'
+    send_resolved: true
+#- name: 'webchat'
+#  wechat_configs:
+#  - corp_id: ""
+#    to_party: "2"
+#    send_resolved: true
+#    to_user: ""
+#    to_tag: ""
+#    agent_id: '1000002'
+#    api_secret: ''

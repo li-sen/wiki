@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Endpoints
+metadata:
+  namespace: monitoring
+  name: ceph
+  labels:
+    k8s-app: ceph
+subsets:
+- addresses:
+  - ip: 172.17.0.85
+    nodeName: by-master01
+  - ip: 172.17.0.86
+    nodeName: by-master02
+  - ip: 172.17.0.87
+    nodeName: by-master03
+  ports:
+  - name: http-metrics
+    port: 9128
+    protocol: TCP
