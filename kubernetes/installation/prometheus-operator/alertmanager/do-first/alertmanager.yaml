@@ -3,9 +3,9 @@ templates:
 global:
   resolve_timeout: 5m
   smtp_smarthost: 'smtp.163.com:25'
-  smtp_from: '17676@163.com'
-  smtp_auth_username: '176@163.com'
-  smtp_auth_password: 'aa56'
+  smtp_from: '15658157676@163.com'
+  smtp_auth_username: '15658157676@163.com'
+  smtp_auth_password: 'a123b456'
   smtp_require_tls: false
 route:
   receiver: email-alert
@@ -37,7 +37,7 @@ route:
 receivers:
 - name: 'email-alert'
   email_configs:
-  - to : '4293@qq.com'
+  - to : '429575613@qq.com'
     send_resolved: true
 - name: webhook
   webhook_configs:
