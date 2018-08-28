@@ -604,7 +604,7 @@ spec:
         sum(rate(rest_client_requests_total{code!~"2.."}[5m])) by (instance, job) * 100
           /
         sum(rate(rest_client_requests_total[5m])) by (instance, job)
-          > 1
+          > 3
       for: 3m
       labels:
         severity: warning
@@ -1110,3 +1110,22 @@ spec:
       annotations:
         description: '{{$labels.job}} on {{$labels.instance}} is unhealthy current value is ({{$value}}'
         summary: Ceph_cluster_available_warning
+
+  - name: CalicoAlerts
+    rules:
+    - alert: CalicoNotReady
+      expr: count(felix_active_local_endpoints) / count(felix_cluster_num_hosts) != 1
+      for: 3m
+      labels:
+        severity: critical
+      annotations:
+        description: '{{$labels.job}} on {{$labels.instance}} is not ready.'
+        summary: Calico not ready
+    - alert: Calico_ipset_errors
+      expr: sum(felix_ipset_errors) / sum(felix_ipset_calls) > 0.1
+      for: 3m
+      labels:
+        severity: warning
+      annotations:
+        description: '{{$labels.job}} on {{$labels.instance}} is unhealthy  current value is ({{$value}}'
+        summary: Calico_ipset_errors
