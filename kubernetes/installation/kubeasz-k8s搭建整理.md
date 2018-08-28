@@ -276,6 +276,11 @@ vim /etc/ansible/roles/kube-node/templates/kubelet.service.j2
 ```bash
 FELIX_PROMETHEUSMETRICSENABLED ture
 FELIX_PROMETHEUSMETRICSPORT 9091
+
+ports:
+- containerPort: 9091
+  hostPort: 9091
+  name: http-metrics
 ```
 - 更改kube-proxy负载模式为ipvs
 ```bash
