@@ -1,6 +1,11 @@
-> 这是本人参照开源项目kubeasz（[项目地址](https://github.com/gjmzj/kubeasz)），在阿里云vpc环境使用slb搭建的一套3\*master+3\*node的高可用k8s集群，这里只是记录使用kubeasz搭建集群关键步骤以及需要注意的点，这并不是一份完整的k8s安装文档，命令操作时建议使用screen进行操作，以免网络问题造成操作失败。
+> 这是本人参照开源项目kubeasz（[项目地址](https://github.com/gjmzj/kubeasz)），在阿里云vpc环境使用slb搭建的一套3\*master+3\*node的高可用k8s集群，这并不是一份完整的k8s安装文档，这里只是记录使用kubeasz搭建集群关键步骤以及需要注意的点，完整的请参考源项目，命令操作时建议使用screen进行操作，以免网络问题造成操作失败。
 
+> 这里说明下master高可用网络通信：多master使用slb是为了解决api-server的高可用，api-server是为master外部相关应用(kubectl、kubelet等)服务的，master上的cm、scheduler其实是只跟本机的api-server(监听地址一般为127.0.0.1/内网ip)通信，跟slb没有通信需求，并且多master中通过内部ip通信竞选只有一个cm和scheduler是生效可用，其他的节点为备用。
 ---
+# 关于阿里云slb
+> 特别说明是slb，因为阿里云的slb 是不支持后端rs访问slb地址，用kubeasz项目部署时，slb后面的master是需要跟slb通信，这里用一台haproxy中转下，考虑高可用也可以用用两台。
+kubeasz 新版本将master node角色重合，这样就算有slb，还是得需要haproxy了，如果master可以去掉node角色，基于多master的通信流程，那haproxy只在部署的时候使用下，安装完可以直接去掉，让slb直连master（master就无法使用kubectl），
+原理上将是没问题的，只是影不影响kubeasz后续的周边服务安装就不得而知，我是没做测试。
 
 # 集群规划
 ## 服务器规划
@@ -14,13 +19,13 @@ by-node01 | 172.17.0.88 | 4c8g 40g+40g | node
 by-node02 | 172.17.0.89 | 4c8g 40g+40g | node
 by-node03 | 172.17.0.90 | 4c8g 40g+40g | node
 by-deploy01 | 172.17.0.91 | 2c4g 40g+60g | 发布控制
+by-haproxy01 | 172.17.0.94 | 2c4g 40g+60g | lb
 
 ## 阿里云slb
 名称 | ip | 备注
 ---|---|---
 by-master | 172.17.0.92 | kube-apiserver高可用
 by-node | 172.17.0.93 | 后续服务暴露可能用到
-
 
 ## 组件说明
 组件 | 版本
@@ -31,6 +36,7 @@ k8s | v1.10.4
 etcd | v3.3.6
 docker | 18.03.0-ce
 network | calico v3.0
+> 建议大家把内核都升级到最新的lt版本，不然会出现各种bug，因为centos的内核版本实在太老了。
 
 ## 安装准备
 ### 各节点安装python
@@ -43,7 +49,7 @@ yum update
 yum install python -y
 ```
 ### 各节点时间同步
-集群时间不同步会造成后续很多问题，这是集群基本条件；阿里云ecs时间同步ntp服务默认装好，这里就省略，没有的自行安装。
+集群时间不同步会造成后续很多问题（譬如etcd不可用），这是集群基本条件；阿里云ecs时间同步ntp服务默认装好，这里就省略，没有的自行安装。
 
 ### 在deploy节点安装及准备ansible
 
@@ -108,6 +114,7 @@ vim hosts                       # 根据实际情况修改此hosts文件
 
 # 负载均衡至少两个节点，安装 haproxy+keepalived
 # 如果是公有云环境请优先使用云上负载均衡，lb组留空
+# 我这里是自己手动yum装的haproxy
 [lb]
 
 [kube-node]
@@ -137,7 +144,7 @@ kube-master
 DEPLOY_MODE=multi-master
 
 #集群主版本号，目前支持: v1.8, v1.9, v1.10
-K8S_VER="v1.10"
+K8S_VER="v1.11"
 
 # 集群 MASTER IP即 LB节点VIP地址，为区别与默认apiserver端口，设置VIP监听的服务端口8443
 # 公有云上请使用云负载均衡内网地址和监听端口
@@ -236,7 +243,6 @@ ExecStart=/usr/local/bin/dockerd --graph=/opt/docker
 
 ## 04.kube-master.yml
 - 得先配置好slb+haproxy 不然会报错
-之所以有slb还弄个haproxy主要是 slb不支持后端服务器访问slb，这样master节点kubelet无法跟slb交互，master安装完毕 haproxy可以删除，slb直连master。
 ```bash
 yum install haproxy -y
 vim /etc/haproxy/haproxy.cfg
