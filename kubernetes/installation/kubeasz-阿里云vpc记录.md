@@ -3,9 +3,10 @@
 > 这里说明下master高可用网络通信：多master使用slb是为了解决api-server的高可用，api-server是为master外部相关应用(kubectl、kubelet等)服务的，master上的cm、scheduler其实是只跟本机的api-server(监听地址一般为127.0.0.1/内网ip)通信，跟slb没有通信需求，并且多master中通过内部ip通信竞选只有一个cm和scheduler是生效可用，其他的节点为备用。
 ---
 # 关于阿里云slb
-> 特别说明是slb，因为阿里云的slb 是不支持后端rs访问slb地址，用kubeasz项目部署时，slb后面的master是需要跟slb通信，这里用一台haproxy中转下，考虑高可用也可以用用两台。
-kubeasz 新版本将master node角色重合，这样就算有slb，还是得需要haproxy了，如果master可以去掉node角色，基于多master的通信流程，那haproxy只在部署的时候使用下，安装完可以直接去掉，让slb直连master（master就无法使用kubectl），
-原理上将是没问题的，只是影不影响kubeasz后续的周边服务安装就不得而知，我是没做测试。
+> 因为阿里云的slb 是不支持后端rs访问slb地址，用kubeasz项目部署时，slb后面的master是需要跟slb通信，这里用一台haproxy中转下，考虑高可用也可以用用两台。
+kubeasz 新版本将master node角色重合，这样就算有slb，还是得需要haproxy了，如果master可以去掉node角色，参考高可用master的通信，haproxy只需要在部署的时候使用下，部署完可以直接去掉，让slb直连master
+（这样会造成master就无法使用kubectl），
+原理上将是没问题的，只是影不影响kubeasz后续的周边服务安装就不得而知，我这没做测试。
 
 # 集群规划
 ## 服务器规划
