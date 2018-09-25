@@ -54,6 +54,7 @@ yum install python -y
 ### 初始配置
 - 配置hostname
 - 挂载数据盘
+- 升级内核
 > 自己根据情况自行解决
 
 ### 在deploy节点安装及准备ansible
@@ -228,15 +229,17 @@ ansible all -m copy -a 'src=/root/.ssh/authorized_keys dest=/root/.ssh/authorize
 - 4.4 开始安装
 如果你对集群安装流程不熟悉，请阅读项目首页 **安装步骤** 讲解后分步安装，并对 **每步都进行验证**  
 
-### 分步安装
+### prepare
 ``` bash
 cd /etc/ansible/
-```
-- prepare
-``` bash
+# 注释epel安装，ecs默认自带
+vim /etc/ansible/roles/prepare/tasks/centos.yml
+#- name: 添加EPEL仓库
+#  yum: name=epel-release state=latest
+
 ansible-playbook 01.prepare.yml
 ```
-- etcd
+### etcd
 ```bash
 ansible-playbook 02.etcd.yml
 # 验证etcd状态：
@@ -255,7 +258,7 @@ https://172.16.68.10:2379 is healthy: successfully committed proposal: took = 1.
 https://172.16.68.11:2379 is healthy: successfully committed proposal: took = 1.613388ms
 https://172.16.68.9:2379 is healthy: successfully committed proposal: took = 1.80531ms
 ```
-- docker
+### docker
 ```bash
 # 更改docker服务存储路径：
 ansible kube-cluster  -a 'mkdir -p /opt/docker'
@@ -265,10 +268,10 @@ STORAGE_DIR: "/opt/docker"
 
 ansible-playbook 03.docker.yml
 ```
-- master
+### master
 ```bash
 # 得先配置好slb+haproxy 不然会报错
-ssh k8s-lb01
+ssh k8s-lb01 / ssh k8s-deploy01（不启动仅作为k8s-lb01备用节点）
 yum install haproxy -y
 vim /etc/haproxy/haproxy.cfg
 
@@ -324,7 +327,7 @@ etcd-0               Healthy   {"health":"true"}
 etcd-2               Healthy   {"health":"true"}
 ```
 
-- node
+### node
 ```bash
 ansible-playbook 05.kube-node.yml
 ```
@@ -333,32 +336,68 @@ ansible-playbook 05.kube-node.yml
 iptables -F &&  iptables -X && iptables -F -t nat &&  iptables -X -t nat
 ```
 
+### network
+```bash
+# calico metrics 开启
+vim /etc/ansible/roles/calico/templates/calico.yaml.j2
+...
+          image: calico/node:v3.0.6
+          ports:
+          - containerPort: 9091
+            hostPort: 9091
+            name: http-metrics
+...
+            # Disable IPv6 on Kubernetes.
+            - name: FELIX_IPV6SUPPORT
+              value: "false"
+            - name: FELIX_PROMETHEUSMETRICSENABLED
+              value: "true"
+            - name: FELIX_PROMETHEUSMETRICSPORT
+              value: "9091"
+...
+            
+# svc (promethues-operator需要，如不使用可以不加，也可以后期部署promethues-operator再加)
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: kube-system
+  name: calico
+  labels:
+    k8s-app: calico-node
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+  - name: http-metrics
+    port: 9091
+    targetPort: 9091
+    protocol: TCP
+  selector:
+    k8s-app: calico-node
 
-```
 ansible-playbook 06.network.yml
+
+calicoctl node status
+# 查看所有calico相关数据
+ETCDCTL_API=3 etcdctl --endpoints="http://127.0.0.1:2379" get --prefix /calico
+# 查看 calico网络为各节点分配的网段
+ETCDCTL_API=3 etcdctl --endpoints="http://127.0.0.1:2379" get --prefix /calico/ipam/v2/host
+```
+
+### 插件
+```bash
+# 根据实际情况安装
 ansible-playbook 07.cluster-addon.yml
-# 一步安装
-# ansible-playbook 90.setup.yml
+```
+
+### 一步安装
+```bash
+ansible-playbook 90.setup.yml
 ```
 
 + [可选]对集群所有节点进行操作系统层面的安全加固 `ansible-playbook roles/os-harden/os-harden.yml`，详情请参考[os-harden项目](https://github.com/dev-sec/ansible-os-hardening)
 
-
-
-
-
-- calico metrics 检查是否开启
-```bash
-FELIX_PROMETHEUSMETRICSENABLED ture
-FELIX_PROMETHEUSMETRICSPORT 9091
-
-ports:
-- containerPort: 9091
-  hostPort: 9091
-  name: http-metrics
-```
-
-# 验证集群功能
+### 验证集群功能
 - 查看集群状态
 ```bash
 kubectl get node
@@ -409,28 +448,14 @@ kubectl get pods  -o wide|grep nginx-ds
 kubectl get svc  -o wide|grep nginx-ds
 
 # 检查nodeport可用性
-curl 172.17.0.89:36855
+curl k8s-node01:22462
 # 出现nginx欢迎页
 ```
 - 验证coredns
 ```bash
 kubectl exec  -it nginx-ds-8sd6z /bin/bash
-
 cat /etc/resolv.conf
-
-nameserver 10.68.0.2
-search default.svc.cluster.local. svc.cluster.local. cluster.local.
-options ndots:5
-
 ping nginx-ds
-
-PING nginx-ds.default.svc.cluster.local (10.68.242.108): 48 data bytes
-56 bytes from 10.68.242.108: icmp_seq=0 ttl=64 time=0.049 ms
-56 bytes from 10.68.242.108: icmp_seq=1 ttl=64 time=0.063 ms
-^C--- nginx-ds.default.svc.cluster.local ping statistics ---
-2 packets transmitted, 2 packets received, 0% packet loss
-round-trip min/avg/max/stddev = 0.049/0.056/0.063/0.000 ms
-
 # 能成功解析服务到ip证明dns正常
 ```
 - 验证dashboard
@@ -455,7 +480,7 @@ echo ${DASHBOARD_LOGIN_TOKEN}
 kubectl config set-cluster kubernetes \
   --certificate-authority=/etc/kubernetes/ssl/ca.pem \
   --embed-certs=true \
-  --server=https://172.17.0.92:8443 \
+  --server=https://172.16.68.14:8443 \
   --kubeconfig=dashboard.kubeconfig
 
 # 设置客户端认证参数，使用上面创建的 Token
@@ -473,3 +498,8 @@ kubectl config set-context default \
 kubectl config use-context default --kubeconfig=dashboard.kubeconfig
 ```
 用生成的 dashboard.kubeconfig 登录 Dashboard。
+
+### harbor
+```bash
+
+```
