@@ -3,8 +3,8 @@
 > 这里说明下master高可用网络通信：多master使用slb是为了解决api-server的高可用，api-server是为master外部相关应用(kubectl、kubelet等)服务的，master上的cm、scheduler其实是只跟本机的api-server(监听地址一般为127.0.0.1/内网ip)通信，跟slb没有通信需求，并且多master中通过内部ip通信竞选只有一个cm和scheduler是生效可用，其他的节点为备用。
 ---
 # 关于阿里云slb
-> 因为阿里云的slb 是不支持后端rs访问slb地址，用kubeasz项目部署时，slb后面的master是需要跟slb通信，这里用一台haproxy中转下，考虑高可用也可以用用两台。
-kubeasz 新版本将master node角色重合，这样就算有slb，还是得需要haproxy了，如果master可以去掉node角色，参考高可用master的通信，haproxy只需要在部署的时候使用下，部署完可以直接去掉，让slb直连master
+> 1. 因为阿里云的slb 是不支持后端rs访问slb地址，用kubeasz项目部署时，slb后面的master是需要跟slb通信，这里用一台haproxy中转下，考虑高可用也可以用用两台。
+> 2. kubeasz 新版本将master node角色重合，基于上述master高可用网络通信，就算有slb，还是得需要haproxy了，如果master可以去掉node角色，haproxy只需要在部署的时候使用下，部署完可以直接去掉，让slb直连master
 （这样会造成master就无法使用kubectl），
 原理上将是没问题的，只是影不影响kubeasz后续的周边服务安装就不得而知，我这没做测试。
 
@@ -13,28 +13,27 @@ kubeasz 新版本将master node角色重合，这样就算有slb，还是得需�
 
 hostname | ip | 配置|用途
 ---|---|---|---
-by-master01 | 172.17.0.85 | 2c4g 40g+20g | master
-by-master02 | 172.17.0.86 | 2c4g 40g+20g | master
-by-master03 | 172.17.0.87 | 2c4g 40g+20g | master
-by-node01 | 172.17.0.88 | 4c8g 40g+40g | node
-by-node02 | 172.17.0.89 | 4c8g 40g+40g | node
-by-node03 | 172.17.0.90 | 4c8g 40g+40g | node
-by-deploy01 | 172.17.0.91 | 2c4g 40g+60g | 发布控制
-by-haproxy01 | 172.17.0.94 | 2c4g 40g+60g | lb
+k8s-lb01 | 172.16.68.13 | 2c4g 60g+60g | lb
+k8s-deploy01 | 172.16.68.12 | 2c4g 60g+60g | 跳板、发布
+k8s-master01 | 172.16.68.11 | 4c8g 60g+60g | master/etcd
+k8s-master02 | 172.16.68.10 | 4c8g 60g+60g | master/etcd
+k8s-master03 | 172.16.68.9 | 4c8g 60g+60g | master/etcd
+k8s-ndoe01 | 172.16.68.8 | 4c8g 60g+60g | node
+k8s-ndoe02 | 172.16.68.7 | 4c8g 60g+60g | node
+k8s-ndoe03 | 172.16.68.6 | 4c8g 60g+60g | node
 
 ## 阿里云slb
 名称 | ip | 备注
 ---|---|---
-by-master | 172.17.0.92 | kube-apiserver高可用
-by-node | 172.17.0.93 | 后续服务暴露可能用到
+by-master | 172.16.68.14 | kube-apiserver高可用
 
 ## 组件说明
 组件 | 版本
 ---|---
-os | CentOS Linux release 7.5.1804 (Core)
-kernel | 4.17.3-1.el7.elrepo.x86_64（自行升级）
-k8s | v1.10.4
-etcd | v3.3.6
+os | CentOS Linux release 7.4.1708 (Core)
+kernel | 4.4.157-1.el7.elrepo.x86_64（自行升级）
+k8s | v1.11.3
+etcd | v3.3.8
 docker | 18.03.0-ce
 network | calico v3.0
 > 建议大家把内核都升级到最新的lt版本，不然会出现各种bug，因为centos的内核版本实在太老了。
@@ -51,6 +50,11 @@ yum install python -y
 ```
 ### 各节点时间同步
 集群时间不同步会造成后续很多问题（譬如etcd不可用），这是集群基本条件；阿里云ecs时间同步ntp服务默认装好，这里就省略，没有的自行安装。
+
+### 初始配置
+- 配置hostname
+- 挂载数据盘
+> 自己根据情况自行解决
 
 ### 在deploy节点安装及准备ansible
 
@@ -71,26 +75,26 @@ for i in 172.16.68.{6..13}; do  ssh-copy-id $i; done
 #ssh-copy-id $IPs #$IPs为所有节点地址包括自身，按照提示输入yes 和root密码
 ```
 ### 在deploy节点编排k8s安装
-- 从发布页面 https://github.com/gjmzj/kubeasz/releases 下载源码解压到同样目录
+- 下载源码解压到同样目录
 
 ``` bash
-  wget https://github.com/gjmzj/kubeasz/archive/0.2.1.zip
-  unzip 0.2.1.zip
-  mv kubeasz-0.2.1/* /etc/ansible/
+git clone https://github.com/gjmzj/kubeasz.git
+mkdir -p /etc/ansible
+mv kubeasz/* /etc/ansible
 ```
 - 下载二进制文件
 请从分享的[百度云链接](https://pan.baidu.com/s/1c4RFaA)，下载解压到/etc/ansible/bin目录，如果你有合适网络环境也可以按照/down/download.sh自行从官网下载各种tar包
 
 ``` bash
-tar xf k8s.1-10-4.tar.gz
-mv bin/* /etc/ansible/bin
+tar xf /root/k8sfile/k8s.1-11-3.tar.gz -C /etc/ansible/
 ```
 - [可选]下载离线docker镜像
 服务器使用内部yum源/apt源，但是无法访问公网情况下，请下载离线docker镜像完成集群安装；从百度云盘把`basic_images_kubeasz_x.y.tar.gz` 下载解压到`/etc/ansible/down` 目录
 
 ``` bash
-tar xf basic_images_kubeasz_0.2.tar.gz -C /etc/ansible/down
+tar xf /root/k8sfile/basic_images_kubeasz_0.3.tar.gz -C /etc/ansible/down/
 ```
+
 
 - 4.3 配置集群参数
 
@@ -99,38 +103,42 @@ cd /etc/ansible
 cp example/hosts.m-masters.example hosts
 vim hosts                       # 根据实际情况修改此hosts文件
 
-[root@by-deploy01 ~]# cat /etc/ansible/hosts
-# 部署节点：运行这份 ansible 脚本的节点
+
+[root@k8s-deploy01 ~]# cat /etc/ansible/hosts
+# 集群部署节点：一般为运行ansible 脚本的节点
+# 变量 NTP_ENABLED (=yes/no) 设置集群是否安装 chrony 时间同步
 [deploy]
-172.17.0.91
+172.16.68.12 NTP_ENABLED=no
+
 # etcd集群请提供如下NODE_NAME，注意etcd集群必须是1,3,5,7...奇数个节点
 [etcd]
-172.17.0.85 NODE_NAME=etcd1
-172.17.0.86 NODE_NAME=etcd2
-172.17.0.87 NODE_NAME=etcd3
+172.16.68.11 NODE_NAME=etcd1
+172.16.68.10 NODE_NAME=etcd2
+172.16.68.9 NODE_NAME=etcd3
 
 [kube-master]
-172.17.0.85
-172.17.0.86
-172.17.0.87
+172.16.68.11
+172.16.68.10
+172.16.68.9
 
-# 负载均衡至少两个节点，安装 haproxy+keepalived
-# 如果是公有云环境请优先使用云上负载均衡，lb组留空
-# 我这里是自己手动yum装的haproxy
+# 负载均衡(目前已支持多于2节点，一般2节点就够了) 安装 haproxy+keepalived
 [lb]
 
-[kube-node]
-172.17.0.88
-172.17.0.89
-172.17.0.90
+[haproxy]
+172.16.68.13
 
-# 如果启用harbor，请配置后面harbor相关参数
-[harbor]
-#192.168.1.8
+[kube-node]
+172.16.68.8
+172.16.68.7
+172.16.68.6
 
 [kube-cluster:children]
 kube-node
 kube-master
+
+# 参数 NEW_INSTALL：yes表示新建，no表示使用已有harbor服务器
+[harbor]
+172.16.68.12 HARBOR_DOMAIN="harbor.weimeng-hosp.com" NEW_INSTALL=yes
 
 # 预留组，后续添加master节点使用
 [new-master]
@@ -145,52 +153,38 @@ kube-master
 #集群部署模式：allinone, single-master, multi-master
 DEPLOY_MODE=multi-master
 
-#集群主版本号，目前支持: v1.8, v1.9, v1.10
+#集群主版本号，目前支持: v1.8, v1.9, v1.10，v1.11
 K8S_VER="v1.11"
 
 # 集群 MASTER IP即 LB节点VIP地址，为区别与默认apiserver端口，设置VIP监听的服务端口8443
 # 公有云上请使用云负载均衡内网地址和监听端口
-MASTER_IP="172.17.0.92"
+MASTER_IP="172.16.68.14"
 KUBE_APISERVER="https://{{ MASTER_IP }}:8443"
 
-#TLS Bootstrapping 使用的 Token，使用 head -c 16 /dev/urandom | od -An -t x | tr -d ' ' 生成
-BOOTSTRAP_TOKEN="xxxxxxxxxxxxxxxxxxxx"
-
-# 集群网络插件，目前支持calico, flannel, kube-router
+# 集群网络插件，目前支持calico, flannel, kube-router, cilium
 CLUSTER_NETWORK="calico"
 
-# 默认使用kube-proxy, 可选SERVICE_PROXY="IPVS" (前提是网络选择kube-router)
-SERVICE_PROXY="kube-proxy"
-
 # 服务网段 (Service CIDR），注意不要与内网已有网段冲突
-SERVICE_CIDR="10.68.0.0/16"
+SERVICE_CIDR="10.69.0.0/16"
 
 # POD 网段 (Cluster CIDR），注意不要与内网已有网段冲突
-CLUSTER_CIDR="172.20.0.0/16"
+CLUSTER_CIDR="172.21.0.0/16"
 
 # 服务端口范围 (NodePort Range)
 NODE_PORT_RANGE="20000-40000"
 
 # kubernetes 服务 IP (预分配，一般是 SERVICE_CIDR 中第一个IP)
-CLUSTER_KUBERNETES_SVC_IP="10.68.0.1"
+CLUSTER_KUBERNETES_SVC_IP="10.69.0.1"
 
 # 集群 DNS 服务 IP (从 SERVICE_CIDR 中预分配)
-CLUSTER_DNS_SVC_IP="10.68.0.2"
+CLUSTER_DNS_SVC_IP="10.69.0.2"
 
 # 集群 DNS 域名
 CLUSTER_DNS_DOMAIN="cluster.local."
 
-# etcd 集群间通信的IP和端口, 根据etcd组成员自动生成
-TMP_NODES="{% for h in groups['etcd'] %}{{ hostvars[h]['NODE_NAME'] }}=https://{{ h }}:2380,{% endfor %}"
-ETCD_NODES="{{ TMP_NODES.rstrip(',') }}"
-
-# etcd 集群服务地址列表, 根据etcd组成员自动生成
-TMP_ENDPOINTS="{% for h in groups['etcd'] %}https://{{ h }}:2379,{% endfor %}"
-ETCD_ENDPOINTS="{{ TMP_ENDPOINTS.rstrip(',') }}"
-
 # 集群basic auth 使用的用户名和密码
 BASIC_AUTH_USER="admin"
-BASIC_AUTH_PASS="xxxxxx"
+BASIC_AUTH_PASS="Weimeng@2018"
 
 # ---------附加参数--------------------
 #默认二进制文件目录
@@ -202,50 +196,79 @@ ca_dir="/etc/kubernetes/ssl"
 #部署目录，即 ansible 工作目录，建议不要修改
 base_dir="/etc/ansible"
 
-#私有仓库 harbor服务器 (域名或者IP)
-#HARBOR_IP="192.168.1.8"
-#HARBOR_DOMAIN="harbor.yourdomain.com"
 ```
+> 我这里根据自己的需求新增了下haproxy、kube-cluster
 
 - 验证ansible安装，正常能看到每个节点返回 SUCCESS
 ```bash
 ansible all -m ping
 ```
+
+- 配置hosts文件、ssh-key
+为了后续部署方便，建议还是配置好/etc/hosts文件、ssh-key，分发都所有节点。
+``` bash
+vim  /etc/hosts
+
+127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4
+::1         localhost localhost.localdomain localhost6 localhost6.localdomain6
+
+172.16.68.13 k8s-lb01
+172.16.68.12 k8s-deploy01
+172.16.68.11 k8s-master01
+172.16.68.10 k8s-master02
+172.16.68.9 k8s-master03
+172.16.68.8 k8s-node01
+172.16.68.7 k8s-node02
+172.16.68.6 k8s-node03
+
+ansible all  -m copy  -a 'src=/etc/hosts dest=/etc/hosts'
+ansible all -m copy -a 'src=/root/.ssh/authorized_keys dest=/root/.ssh/authorized_keys'
+```
+
 - 4.4 开始安装
 如果你对集群安装流程不熟悉，请阅读项目首页 **安装步骤** 讲解后分步安装，并对 **每步都进行验证**  
 
+### 分步安装
 ``` bash
-# 分步安装
 cd /etc/ansible/
+```
+- prepare
+``` bash
 ansible-playbook 01.prepare.yml
+```
+- etcd
+```bash
 ansible-playbook 02.etcd.yml
+# 验证etcd状态：
+ssh k8s-master01
+
+export NODE_IPS="172.16.68.10 172.16.68.11 172.16.68.9"
+for ip in ${NODE_IPS}; do
+  ETCDCTL_API=3 etcdctl \
+  --endpoints=https://${ip}:2379  \
+  --cacert=/etc/kubernetes/ssl/ca.pem \
+  --cert=/etc/etcd/ssl/etcd.pem \
+  --key=/etc/etcd/ssl/etcd-key.pem \
+  endpoint health; done
+
+https://172.16.68.10:2379 is healthy: successfully committed proposal: took = 1.629536ms
+https://172.16.68.11:2379 is healthy: successfully committed proposal: took = 1.613388ms
+https://172.16.68.9:2379 is healthy: successfully committed proposal: took = 1.80531ms
+```
+- docker
+```bash
+# 更改docker服务存储路径：
+ansible kube-cluster  -a 'mkdir -p /opt/docker'
+vim /etc/ansible/roles/docker/defaults/main.yml
+# docker容器存储目录
+STORAGE_DIR: "/opt/docker"
+
 ansible-playbook 03.docker.yml
-ansible-playbook 04.kube-master.yml
-ansible-playbook 05.kube-node.yml
-ansible-playbook 06.network.yml
-ansible-playbook 07.cluster-addon.yml
-# 一步安装
-# ansible-playbook 90.setup.yml
 ```
-
-+ [可选]对集群所有节点进行操作系统层面的安全加固 `ansible-playbook roles/os-harden/os-harden.yml`，详情请参考[os-harden项目](https://github.com/dev-sec/ansible-os-hardening)
-
-# 分步安装说明
-## 01.prepare.yml
-yum安装增加几个包：
-- conntrack
-- ipvsadm
-- ipset
-
-## 03.docker.yml
-更改docker服务存储路径：
+- master
 ```bash
-ExecStart=/usr/local/bin/dockerd --graph=/opt/docker
-```
-
-## 04.kube-master.yml
-- 得先配置好slb+haproxy 不然会报错
-```bash
+# 得先配置好slb+haproxy 不然会报错
+ssh k8s-lb01
 yum install haproxy -y
 vim /etc/haproxy/haproxy.cfg
 
@@ -271,15 +294,59 @@ listen kube-master
         mode tcp
         option tcplog
         balance source
-        server master01 172.17.0.85:6443 check inter 2000 fall 2 rise 2 weight 1
-        server master01 172.17.0.86:6443 check inter 2000 fall 2 rise 2 weight 1
-        server master01 172.17.0.87:6443 check inter 2000 fall 2 rise 2 weight 1
+        server k8s-master01 172.16.68.11:6443 check inter 2000 fall 2 rise 2 weight 1
+        server k8s-master02 172.16.68.10:6443 check inter 2000 fall 2 rise 2 weight 1
+        server k8s-master03 172.16.68.9:6443 check inter 2000 fall 2 rise 2 weight 1
+
+systemctl start haproxy
+systemctl enable haproxy
+
+vim /etc/ansible/roles/kube-node/defaults/main.yml
+# 默认使用kube-proxy的 'iptables' 模式，可选 'ipvs' 模式(experimental)
+PROXY_MODE: "ipvs"
+
+# Kubelet 根目录
+KUBELET_ROOT_DIR: "/opt/kubelet"
+
+# node节点最大pod 数
+MAX_PODS: 110
+
+ansible kube-cluster  -a 'mkdir -p /opt/kubelet'
+
+ansible-playbook 04.kube-master.yml
+
+kubectl cluster-info
+NAME                 STATUS    MESSAGE             ERROR
+controller-manager   Healthy   ok
+scheduler            Healthy   ok
+etcd-1               Healthy   {"health":"true"}
+etcd-0               Healthy   {"health":"true"}
+etcd-2               Healthy   {"health":"true"}
 ```
-- 更改kubelet pod 存储路径
+
+- node
 ```bash
-vim /etc/ansible/roles/kube-node/templates/kubelet.service.j2
-  --root-dir=/opt/kubelet \
+ansible-playbook 05.kube-node.yml
 ```
+> iptables清理：
+```bash
+iptables -F &&  iptables -X && iptables -F -t nat &&  iptables -X -t nat
+```
+
+
+```
+ansible-playbook 06.network.yml
+ansible-playbook 07.cluster-addon.yml
+# 一步安装
+# ansible-playbook 90.setup.yml
+```
+
++ [可选]对集群所有节点进行操作系统层面的安全加固 `ansible-playbook roles/os-harden/os-harden.yml`，详情请参考[os-harden项目](https://github.com/dev-sec/ansible-os-hardening)
+
+
+
+
+
 - calico metrics 检查是否开启
 ```bash
 FELIX_PROMETHEUSMETRICSENABLED ture
@@ -289,15 +356,6 @@ ports:
 - containerPort: 9091
   hostPort: 9091
   name: http-metrics
-```
-- 更改kube-proxy负载模式为ipvs
-```bash
-vim /etc/ansible/roles/kube-node/templates/kube-proxy.service.j2
-  --proxy-mode=ipvs \
-```
-> iptables清理：
-```bash
-iptables -F &&  iptables -X && iptables -F -t nat &&  iptables -X -t nat
 ```
 
 # 验证集群功能
