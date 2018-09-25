@@ -67,7 +67,8 @@ pip install --no-cache-dir ansible -i http://mirrors.aliyun.com/pypi/simple/ --t
 
 ``` bash
 ssh-keygen -t rsa -b 2048 -C "deploy@123.com" -P ''
-ssh-copy-id $IPs #$IPs为所有节点地址包括自身，按照提示输入yes 和root密码
+for i in 172.16.68.{6..13}; do  ssh-copy-id $i; done
+#ssh-copy-id $IPs #$IPs为所有节点地址包括自身，按照提示输入yes 和root密码
 ```
 ### 在deploy节点编排k8s安装
 - 从发布页面 https://github.com/gjmzj/kubeasz/releases 下载源码解压到同样目录
