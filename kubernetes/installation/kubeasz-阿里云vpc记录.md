@@ -501,5 +501,15 @@ kubectl config use-context default --kubeconfig=dashboard.kubeconfig
 
 ### harbor
 ```bash
+wget https://storage.googleapis.com/harbor-releases/release-1.6.0/harbor-offline-installer-v1.6.0.tgz
+vim /etc/ansible/roles/harbor/defaults/main.yml
+# harbor version
+HARBOR_VER: "v1.6.0"
 
+mkdir -p /opt/harbor/data
+# 根据实际情况调整
+vim /etc/ansible/roles/harbor/templates/harbor.cfg.j2
+
+# 调整harbor存储路径
+sed -i 's#/data#/opt/data#g' /etc/ansible/roles/harbor/tasks/main.yml
 ```
