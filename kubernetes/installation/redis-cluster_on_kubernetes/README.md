@@ -11,11 +11,10 @@ docker build -t 172.17.0.91/k8s/redis:v1 .
 docker images
 
 # 因为我的环境是镜像仓库的，所以我就直接导出镜像，然后分发到node节点在导入
-docker save 172.17.0.91/k8s/redis > /root/redis.tar.gz 
-ansible kube-node -m copy -a 'src=/root/redis.tar.gz dest=/root'
+docker save 172.17.0.91/k8s/redis:v1 > /root/redis.tar.gz 
+ansible kube-cluster -m copy -a 'src=/root/redis.tar.gz dest=/root'
 
-[root@by-node01 ~]# docker load < redis.tar.gz
-
+ansible kube-cluster -m shell -a 'docker load < /root/redis.tar.gz'
 ```
 
 # 部署
