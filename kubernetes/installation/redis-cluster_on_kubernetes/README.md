@@ -88,6 +88,24 @@ OK
 ```
 > 我自己进行故障模拟 测试时通过的，删掉一个pod，基本会立马拉起一个并加入集群，复杂的故障模拟后续更新。
 
+> 贴下我这边应用配置文件中redis-cluster相关配置
+```bash
+################################################
+#                   Redis
+################################################
+#spring.redis.host=192.168.4.35
+spring.redis.cluster.nodes=redis-cluster-0.redis-cluster.default.svc.cluster.local:6379,redis-cluster-1.redis-cluster.default.svc.cluster.local:6379,redis-cluster-2.redis-cluster.default.svc.cluster.local:6379,redis-cluster-3.redis-cluster.default.svc.cluster.local:6379,redis-cluster-4.redis-cluster.default.svc.cluster.local:6379,redis-cluster-5.redis-cluster.default.svc.cluster.local:6379
+spring.redis.data-base=0
+spring.redis.port=6379
+#spring.redis.password=foobared
+spring.redis.pool.max-active=20
+spring.redis.pool.max-wait=-30000
+spring.redis.pool.max-idle=8
+spring.redis.pool.min-idle=1
+spring.redis.timeout=0
+```
+
+
 # 集群常用操作
 > copy原作者；由于时间仓促，自己没有验证，后续有机会再来核实正确性。
 ## Adding nodes
