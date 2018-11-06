@@ -69,6 +69,7 @@ data:
     performance-schema-instrument='memory/%=COUNTED'
     interactive_timeout = 172800
     wait_timeout = 172800
+    max_allowed_packet = 1024M
 
     [mysql]
     default-character-set = utf8mb4
