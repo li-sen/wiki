@@ -48,6 +48,10 @@ redis.conf: |+
 
 kubectl exec -it redis-cluster-0 -- redis-trib create --replicas 1 \
 $(kubectl get pods -l app=redis-cluster -o jsonpath='{range.items[*]}{.status.podIP}:6379 ')
+
+# redis5.0使用redis-cli作为创建集群的命令，使用c语言实现，不再使用ruby语言。
+kubectl exec -it redis-cluster-0 -- redis-cli --cluster create  \
+$(kubectl get pods -l app=redis-cluster -o jsonpath='{range.items[*]}{.status.podIP}:6379 ') --cluster-replicas 1
 # 会有提示 输入yes
 # 选项--replicas 1表示我们想为每个master指定一个slave。其余参数是需要加到集群的实例地址。
 # 初始化后会得到3主3从
