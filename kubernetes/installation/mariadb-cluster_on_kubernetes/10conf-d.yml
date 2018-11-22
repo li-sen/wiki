@@ -24,6 +24,9 @@ data:
     wsrep_slave_threads=4
     wsrep_replicate_myisam=ON
     wsrep_causal_reads=ON
+    wsrep_retry_autocommit = 4
+    wsrep_log_conflicts = ON
+    wsrep_provider_options = "cert.log_conflicts = YES"
 
     binlog_format=ROW
     default_storage_engine=InnoDB
