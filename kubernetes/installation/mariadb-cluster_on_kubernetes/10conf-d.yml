@@ -73,6 +73,7 @@ data:
     interactive_timeout = 172800
     wait_timeout = 172800
     max_allowed_packet = 1024M
+    max_connections = 500
 
     [mysql]
     default-character-set = utf8mb4
