@@ -1,3 +1,21 @@
+
+# 基础镜像
+```bash
+docker build -t harbor.xxx.com/pub/zookeeper:3.4.10 .
+docker push harbor.xxx.com/pub/zookeeper:3.4.10
+```
+# 部署
+```bash
+# 修改storageClassName 镜像地址 以及 imagePullSecrets
+kubectl apply -f zk-statefulsets-ceph.yaml
+
+# 验证
+```bash
+kubectl exec -it zk-0 ./zkServer.sh status
+kubectl exec -it zk-1 ./zkServer.sh status
+kubectl exec -it zk-2 ./zkServer.sh status
+```
+
 [![Build Status](https://travis-ci.org/engapa/zookeeper-k8s-openshift.svg)](https://travis-ci.org/engapa/zookeeper-k8s-openshift)
 [![Docker Pulls](https://img.shields.io/docker/pulls/engapa/zookeeper.svg)](https://hub.docker.com/r/engapa/zookeeper/)
 [![Docker Stars](https://img.shields.io/docker/stars/engapa/zookeeper.svg)](https://hub.docker.com/r/engapa/zookeeper/)
