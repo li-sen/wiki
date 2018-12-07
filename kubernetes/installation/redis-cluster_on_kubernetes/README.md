@@ -5,21 +5,10 @@
 k8s|v1.11.0
 存储|ceph version 12.2.6
 > 相关环境搭建可以在我wiki中找到
-# 自定redis镜像
-```bash
-docker build -t 172.17.0.91/k8s/redis:v1 .
-docker images
-
-# 因为我的环境是镜像仓库的，所以我就直接导出镜像，然后分发到node节点在导入
-docker save 172.17.0.91/k8s/redis:v1 > /root/redis.tar.gz 
-ansible kube-cluster -m copy -a 'src=/root/redis.tar.gz dest=/root'
-
-ansible kube-cluster -m shell -a 'docker load < /root/redis.tar.gz'
-```
 
 # 部署
 ```bash
-# 需要根据你实际环境改两个地方：1. 镜像地址  2. storageClassName
+# 需要根据你实际环境改一个地方： storageClassName
 kubectl apply -f redis-cluster.yml
 
 [root@by-deploy01 redis-cluster]# kubectl get pod
@@ -45,10 +34,6 @@ redis.conf: |+
 
 # 集群初始化
 ```bash
-
-kubectl exec -it redis-cluster-0 -- redis-trib create --replicas 1 \
-$(kubectl get pods -l app=redis-cluster -o jsonpath='{range.items[*]}{.status.podIP}:6379 ')
-
 # redis5.0使用redis-cli作为创建集群的命令，使用c语言实现，不再使用ruby语言。
 kubectl exec -it redis-cluster-0 -- redis-cli --cluster create  \
 $(kubectl get pods -l app=redis-cluster -o jsonpath='{range.items[*]}{.status.podIP}:6379 ') --cluster-replicas 1
