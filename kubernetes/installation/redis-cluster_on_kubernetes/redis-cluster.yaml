@@ -54,7 +54,7 @@ spec:
     spec:
       containers:
       - name: redis-cluster
-        image: 172.17.0.91/k8s/redis:v1
+        image: redis
         ports:
         - containerPort: 6379
           name: client
