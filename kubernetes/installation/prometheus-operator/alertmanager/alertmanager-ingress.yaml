@@ -5,7 +5,7 @@ metadata:
   namespace: monitoring
 spec:
   rules:
-  - host: alertmanager.mecby.com
+  - host: alertmanager.xxx.com
     http:
       paths:
       - path: /
