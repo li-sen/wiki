@@ -39,8 +39,10 @@ A reasonable alert is on `mysql_global_status_wsrep_cluster_size` staying below 
 > 会丢失数据，仅用于自己测试环境
 ```bash
 # 到第一个（mariadb-0）节点，找到挂载的数据目录
-cd /opt/kubelet/plugins/kubernetes.io/rbd/mounts/k8s-image-kubernetes-dynamic-pvc-95b2a503-9561-11e8-bab0-00163e13cf6c/db
+kubectl delete pod mariadb-0 -n mysql # 一般情况，mariadb-0会起不来，先删掉重新启动，进入init状态
 # 重命名 grastate.dat 或者直接干掉
+kubectl -n mysql exec -it mariadb-0 bash -c init-config
+cd /data/db/
 mv grastate.dat grastate.dat.bak
 # 重新启动集群
 kubectl get pod --all-namespaces -o wide
