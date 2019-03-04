@@ -40,6 +40,9 @@ $(kubectl get pods -l app=redis-cluster -o jsonpath='{range.items[*]}{.status.po
 # 会有提示 输入yes
 # 选项--replicas 1表示我们想为每个master指定一个slave。其余参数是需要加到集群的实例地址。
 # 初始化后会得到3主3从
+# 其他namespaces
+kubectl exec -it  redis-cluster-0  -n ioht-master -- redis-cli --cluster create  \
+$(kubectl get pods  -n ioht-master -l app=redis-cluster -o jsonpath='{range.items[*]}{.status.podIP}:6379 ') --cluster-replicas 1
 ```
 # 查看集群状态
 ```bash
