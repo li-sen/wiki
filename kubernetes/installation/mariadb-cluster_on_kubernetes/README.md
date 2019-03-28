@@ -50,91 +50,6 @@ kubectl delete pod mariadb-0 -n mysql # 一般情况，mariadb-0会起不来，�
 kubectl logs -f mariadb-0  -n mysql -c init-config
 kubectl --namespace=mysql exec -c init-config mariadb-0 -- touch /tmp/confirm-new-cluster
 # 至此，整个集群会快速拉起来，然后可以进行数据验证。
-```
-或更改init.sh 直接启动集群
-```bash
-init.sh: |
-    #!/bin/bash
-    set -x
-    [ "$(pwd)" != "/etc/mysql/conf.d" ] && cp * /etc/mysql/conf.d/
-
-    HOST_ID=${HOSTNAME##*-}
-
-    STATEFULSET_SERVICE=$(dnsdomainname -d)
-    POD_FQDN=$(dnsdomainname -A)
-
-    echo "This is pod $HOST_ID ($POD_FQDN) for statefulset $STATEFULSET_SERVICE"
-
-    [ -z "$DATADIR" ] && exit "Missing DATADIR variable" && exit 1
-
-    SUGGEST_EXEC_COMMAND="kubectl --namespace=$POD_NAMESPACE exec -c init-config $POD_NAME --"
-
-    function wsrepNewCluster {
-      sed -i 's|^#init-new-cluster#||' /etc/mysql/conf.d/galera.cnf
-    }
-
-    function wsrepRecover {
-      sed -i 's|^#init-recover#||' /etc/mysql/conf.d/galera.cnf
-    }
-
-    function wsrepForceBootstrap {
-      sed -i 's|safe_to_bootstrap: 0|safe_to_bootstrap: 1|' /data/db/grastate.dat
-    }
-
-    [[ $STATEFULSET_SERVICE = mariadb.* ]] || echo "WARNING: unexpected service name $STATEFULSET_SERVICE, Peer detection below may fail falsely."
-
-    if [ $HOST_ID -eq 0 ]; then
-      echo "This is the 1st statefulset pod. Checking if the statefulset is down ..."
-      getent hosts mariadb
-      [ $? -eq 2 ] && {
-        # https://github.com/docker-library/mariadb/commit/f76084f0f9dc13f29cce48c727440eb79b4e92fa#diff-b0fa4b30392406b32de6b8ffe36e290dR80
-        if [ ! -d "$DATADIR/mysql" ]; then
-          echo "No database in $DATADIR; configuring $POD_NAME for initial start"
-          wsrepNewCluster
-        else
-          set +x
-          echo "----- ACTION REQUIRED -----"
-          echo "No peers found, but data exists. To start in wsrep_new_cluster mode, run:"
-          echo "  $SUGGEST_EXEC_COMMAND touch /tmp/confirm-new-cluster"
-          echo "Or to start in recovery mode, to see replication state, run:"
-          echo "  $SUGGEST_EXEC_COMMAND touch /tmp/confirm-recover"
-          echo "Or to force bootstrap on this node, potentially losing writes, run:"
-          echo "  $SUGGEST_EXEC_COMMAND touch /tmp/confirm-force-bootstrap"
-          #echo "    NOTE This bypasses the following warning from new cluster mode:"
-          #echo "    It may not be safe to bootstrap the cluster from this node. It was not the last one to leave the cluster and may not contain all the updates. To force cluster bootstrap with this node, edit the grastate.dat file manually and set safe_to_bootstrap to 1 ."
-          echo "Or to try a regular start (for example after recovery + manual intervention), run:"
-          echo "  $SUGGEST_EXEC_COMMAND touch /tmp/confirm-resume"
-          echo "Waiting for response ..."
-          while [ ! -f /tmp/confirm-resume ]; do
-            sleep 1
-            if [ "$AUTO_NEW_CLUSTER" = "true" ]; then
-              echo "The AUTO_NEW_CLUSTER env was set to $AUTO_NEW_CLUSTER, will proceed without confirmation"
-              wsrepNewCluster
-              touch /tmp/confirm-resume
-            elif [ -f /tmp/confirm-new-cluster ]; then
-              echo "Confirmation received. Resuming new cluster start ..."
-              wsrepNewCluster
-              touch /tmp/confirm-resume
-            elif [ -f /tmp/confirm-force-bootstrap ]; then
-              echo "Forcing bootstrap on this node ..."
-              wsrepForceBootstrap
-              touch /tmp/confirm-new-cluster
-            elif [ -f /tmp/confirm-recover ]; then
-              echo "Confirmation received. Resuming in recovery mode."
-              echo "Note: to start the other pods you need to edit OrderedReady and add a command: --wsrep-recover"
-              wsrepRecover
-              touch /tmp/confirm-resume
-            fi
-          done
-          rm /tmp/confirm-*
-          set -x
-        fi
-      }
-    fi
-
-    # https://github.com/docker-library/mariadb/blob/master/10.2/docker-entrypoint.sh#L62
-    mysqld --verbose --help --log-bin-index="$(mktemp -u)" | tee /tmp/mariadb-start-config | grep -e ^version -e ^datadir -e ^wsrep -e ^binlog -e ^character-set -e ^collation
-```
 > 此操作还是尽量避免，可能会丢失事务，我这是测试环境为了可以快速拉起服务，才这么干；正常流程通过检查各节点的事务状态来提取最后的序列号，需要先从最后节点上自举启动，然后再启动其它节点。
 
 #### 非k8s环境，集群挂掉，不丢失数据恢复流程
@@ -200,16 +115,16 @@ c）方法1：一旦所有三个节点都处于启动状态并处于主状态，
 ```
 #### 本项目环境，集群挂掉，不丢数据，操作流程
 通过非k8s环境的恢复流程，如果集群整体挂掉，对应此项目我们希望不丢数据的恢复流程应该操作如下：
-1. 删除statefulsets，更改statefulsets启动顺序为 非顺序启动。
+1. 删除statefulsets，此操作不会删除pvc，所以对应存数据的pv也不会有问题
 ```bash
 kubectl delete -f 40mariadb.yml
 ```
 
-2. 修改init.sh
+2. 找出数据最完整的节点
 ```bash
 kubectl apply -f 40mariadb.yml
 kubectl get pod -n mysql
-kubectl logs -f mariadb-0  -n mysql -c init-config
+kubectl logs mariadb-0  -n mysql -c init-config
 ```
 
 3. 参照init.sh，使非正常关闭的节点进入recover模式，找到数据最完整的节点
@@ -219,27 +134,22 @@ kubectl --namespace=mysql exec -c init-config mariadb-1 -- touch /tmp/confirm-re
 kubectl --namespace=mysql exec -c init-config mariadb-2 -- touch /tmp/confirm-recover
 
 kubectl get pod -n mysql -o wide
-```
-4. 进入各节点pv，也就是数据目录查看日志，得到seqno最大节点
-```bash
-# 得到各节点pv
-for pvname in `kubectl get pv |grep mariadb|awk '{print \$1}'`;
-do
-    name=`kubectl get pv $pvname -o yaml|grep 'name: mysql'|awk '{print \$NF}'`
-    name=${name#*-}
-    imagename=`kubectl get pv $pvname -o yaml|grep image|awk '{print \$NF}'`
-    ip=`kubectl get pod $name -n mysql -o wide |grep mariadb|awk '{print \$NF}'`
-    echo "$name  $ip  $imagename"
-done
 
-# 进入对应节点，查看日志
-df -h |grep kubernetes-dynamic-pvc-b3d4b18a-9561-11e8-bab0-00163e13cf6c
-cd /opt/kubelet/plugins/kubernetes.io/rbd/mounts/k8s-image-kubernetes-dynamic-pvc-b3d4b18a-9561-11e8-bab0-00163e13cf6c
+kubectl --namespace=mysql logs mariadb-0 -c mariadb
+kubectl --namespace=mysql logs mariadb-1 -c mariadb
+kubectl --namespace=mysql logs mariadb-2 -c mariadb
+
+查看日志，得到seqno最大节点
+
+# 也可以 先不进入recover模式，直接进入节点查看日志，得到数据最全节点
+kubectl --namespace=mysql exec -c init-config mariadb-0 bash
+kubectl --namespace=mysql exec -c init-config mariadb-1 bash
+kubectl --namespace=mysql exec -c init-config mariadb-2 bash
+分别查看对比
 tail -200f db/error.log |grep 'WSREP: Recovered position'
-# 比对完，各节点需要退出目录，以方便容器删除时释放pv
 
 ```
-5. 进行recovery
+3. 进行recovery
 ```bash
 # 通过对比发现mariadb-2 seqno最大，故第一个引导启动
 kubectl delete -f 40mariadb.yml
@@ -247,10 +157,8 @@ kubectl apply -f 40mariadb.yml
 kubectl get pod -n mysql
 
 # 到mariadb-2 设置安全启动
-cd /opt/kubelet/plugins/kubernetes.io/rbd/mounts/k8s-image-kubernetes-dynamic-pvc-d56272c8-9561-11e8-bab0-00163e13cf6c/db
+kubectl --namespace=mysql exec -c init-config mariadb-2 bash
 sed -i 's/safe_to_bootstrap: 0/safe_to_bootstrap: 1/g' grastate.dat
-# 需要退出目录，以方便容器删除时释放pv
-# 如发现initContainers无法启动则删除40mariadb.yml重建
 
 kubectl --namespace=mysql exec -c init-config mariadb-2 -- touch /tmp/confirm-new-cluster
 sleep 10
