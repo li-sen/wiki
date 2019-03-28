@@ -161,6 +161,8 @@ kubectl get pod -n mysql
 kubectl --namespace=mysql exec -c init-config mariadb-2 bash
 sed -i 's/safe_to_bootstrap: 0/safe_to_bootstrap: 1/g' grastate.dat
 # 删除或者重命名这个文件也行，我这里就直接修改参数了
+# 如果所有节点都 非正常 关闭 ，还需处理gvwstate.dat
+mv gvwstate.dat gvwstate.dat.bak
 
 kubectl --namespace=mysql exec -c init-config mariadb-2 -- touch /tmp/confirm-new-cluster
 sleep 10
