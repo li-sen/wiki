@@ -8,32 +8,26 @@
 这里我对原项目进行了小幅改动，主要改动点就是podManagementPolicy，将OrderedReady，改成Parallel。改动的原因是在当整个集群节点都挂掉了，需要进行手动数据恢复，为了不丢数据，肯定是数据最完整的先 引导启动，然后其他节点在加入同步，这就不能通过顺序启动了；集群都挂掉，使用--wsrep-recover比对seqno，也需要并发启动。init.sh也进行了相应的改动，请自行查看。
 
 
-# Get started
+### 部署
 
 ```bash
 kubectl apply -f .
 ```
 
-### Cluster Health
-
-Readiness and liveness probes will only assert client-level health of individual pods.
-Watch logs for "sst" or "Quorum results", or run this quick check:
+### 验证
 ```
 for i in 0 1 2; do kubectl -n mysql exec mariadb-$i -- mysql -e "SHOW STATUS LIKE 'wsrep_cluster_size';" -N; done
-
+# 设密码
 kubectl -n mysql exec mariadb-0 -- mysql -e "grant all privileges on *.* to root@'%' identified by 'xxxxx' with grant option;"
 ```
-
-Port 9104 exposes plaintext metris in [Prometheus](https://prometheus.io/docs/concepts/data_model/) scrape format.
+监控metrics
 ```
 # with kubectl -n mysql port-forward mariadb-0 9104:9104
 $ curl -s http://localhost:9104/metrics | grep ^mysql_global_status_wsrep_cluster_size
 mysql_global_status_wsrep_cluster_size 3
 ```
 
-A reasonable alert is on `mysql_global_status_wsrep_cluster_size` staying below the desired number of replicas.
-
-### Cluster un-health
+### 故障恢复
 
 #### 集群所有节点down，如何快速恢复
 > 会丢失数据，仅用于自己测试环境
