@@ -51,6 +51,7 @@ kubectl logs -f mariadb-0  -n mysql -c init-config
 kubectl --namespace=mysql exec -c init-config mariadb-0 -- touch /tmp/confirm-new-cluster
 # 至此，整个集群会快速拉起来，然后可以进行数据验证。
 > 此操作还是尽量避免，可能会丢失事务，我这是测试环境为了可以快速拉起服务，才这么干；正常流程通过检查各节点的事务状态来提取最后的序列号，需要先从最后节点上自举启动，然后再启动其它节点。
+```
 
 #### 非k8s环境，集群挂掉，不丢失数据恢复流程
 
@@ -159,6 +160,7 @@ kubectl get pod -n mysql
 # 到mariadb-2 设置安全启动
 kubectl --namespace=mysql exec -c init-config mariadb-2 bash
 sed -i 's/safe_to_bootstrap: 0/safe_to_bootstrap: 1/g' grastate.dat
+# 删除或者重命名这个文件也行，我这里就直接修改参数了
 
 kubectl --namespace=mysql exec -c init-config mariadb-2 -- touch /tmp/confirm-new-cluster
 sleep 10
