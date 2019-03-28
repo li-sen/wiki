@@ -28,6 +28,12 @@ mysql_global_status_wsrep_cluster_size 3
 ```
 
 ### 故障恢复
+#### 恢复流程:
+
+- 集群有节点正常存活，直接重启故障节点即可。
+- 对于没有节点正常存活，也就是全挂的情况，关键就是找最新事务节点，这可以分为两种情况：
+1. 全部正常关闭：比对grastate.dat 事务序号 seqno，最大的最新启动
+2. 全部非正常停止：这种情况一般是机房断电或者bug等原因引起，每个节点上grastate.dat文件中最后执行事务序号seqno都为-1，需要查询gvwstate.dat文件中Primary Component的记录，找到my_uuid和view_id相等的节点即为启动节点，或者进入恢复模式，通过启动日志比对 seqno。
 
 #### 集群所有节点down，如何快速恢复
 > 会丢失数据，仅用于自己测试环境
